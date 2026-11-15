@@ -1,54 +1,14 @@
 //! PIN-based encryption for expansion.json.
-//!
-//! The PIN is never stored. A slow key derivation turns it into an AES-256-GCM
-//! key, and only the ciphertext is written to disk.
 
-use aes_gcm::aead::Aead;
-use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
-use argon2::{Algorithm, Argon2, Params, Version};
-use base64::Engine;
-use rand::RngCore;
-use serde::{Deserialize, Serialize};
-
-use super::store::{ExpansionFile, Snippet};
-
-const KDF: &str = "argon2id";
-const SALT_LEN: usize = 16;
-const NONCE_LEN: usize = 12;
-const KEY_LEN: usize = 32;
-
-#[derive(Clone)]
-pub struct VaultKey {
-    pub key: [u8; KEY_LEN],
-    pub salt: Vec<u8>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SealedFile {
-    version: u32,
-    encrypted: bool,
-    kdf: String,
-    salt: String,
-    nonce: String,
-    ciphertext: String,
-}
-
-pub fn check_pin(pin: &str) -> Result<(), String> {
-    if (4..=12).contains(&pin.len()) && pin.bytes().all(|byte| byte.is_ascii_digit()) {
-        return Ok(());
-    }
-    Err("Use a PIN of 4 to 12 digits.".into())
-}
+use super::store::{ExpansionFile, HiddenSecret, Snippet};
+pub use crate::vault_crypto::{VaultKey, check_pin};
 
 pub fn seal(snippets: &[Snippet], pin: &str) -> Result<(String, VaultKey), String> {
-    check_pin(pin)?;
-    let mut salt = vec![0u8; SALT_LEN];
-    rand::rngs::OsRng.fill_bytes(&mut salt);
-    let key = derive(pin, &salt)?;
-    let vault_key = VaultKey { key, salt };
-    let raw = seal_with_key(snippets, &vault_key)?;
-    Ok((raw, vault_key))
+    let plain = serde_json::to_vec(&ExpansionFile {
+        snippets: snippets.to_vec(),
+    })
+    .map_err(|error| format!("Couldn't encrypt expansions: {error}"))?;
+    crate::vault_crypto::seal_bytes(&plain, pin)
 }
 
 pub fn seal_with_key(snippets: &[Snippet], vault_key: &VaultKey) -> Result<String, String> {
@@ -56,82 +16,54 @@ pub fn seal_with_key(snippets: &[Snippet], vault_key: &VaultKey) -> Result<Strin
         snippets: snippets.to_vec(),
     })
     .map_err(|error| format!("Couldn't encrypt expansions: {error}"))?;
-    let mut nonce_bytes = [0u8; NONCE_LEN];
-    rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
-    let cipher = Aes256Gcm::new_from_slice(&vault_key.key).map_err(|_| "Couldn't encrypt expansions.".to_string())?;
-    let ciphertext = cipher
-        .encrypt(Nonce::from_slice(&nonce_bytes), plain.as_ref())
-        .map_err(|_| "Couldn't encrypt expansions.".to_string())?;
-    let sealed = SealedFile {
-        version: 1,
-        encrypted: true,
-        kdf: KDF.to_string(),
-        salt: encode(&vault_key.salt),
-        nonce: encode(&nonce_bytes),
-        ciphertext: encode(&ciphertext),
-    };
-    let mut raw = serde_json::to_vec_pretty(&sealed).map_err(|error| format!("Couldn't encrypt expansions: {error}"))?;
-    raw.push(b'\n');
-    String::from_utf8(raw).map_err(|_| "Couldn't encrypt expansions.".to_string())
+    crate::vault_crypto::seal_bytes_with_key(&plain, vault_key)
 }
 
 pub fn open(raw: &str, pin: &str) -> Result<(ExpansionFile, VaultKey), String> {
-    check_pin(pin)?;
-    let sealed = sealed_from(raw)?;
-    if sealed.kdf != KDF {
-        return Err("This vault uses an unsupported lock.".into());
-    }
-    let salt = decode(&sealed.salt)?;
-    let key = derive(pin, &salt)?;
-    let file = decrypt(&sealed, &key)?;
-    Ok((file, VaultKey { key, salt }))
+    let (plain, key) = crate::vault_crypto::open_bytes(raw, pin)?;
+    let file = serde_json::from_slice(&plain)
+        .map_err(|_| "Couldn't read the encrypted vault.".to_string())?;
+    Ok((file, key))
 }
 
 pub fn open_with_key(raw: &str, vault_key: &VaultKey) -> Result<ExpansionFile, String> {
-    let sealed = sealed_from(raw)?;
-    decrypt(&sealed, &vault_key.key)
-}
-
-fn sealed_from(raw: &str) -> Result<SealedFile, String> {
-    serde_json::from_str(raw).map_err(|_| "Couldn't read the encrypted vault.".to_string())
-}
-
-fn decrypt(sealed: &SealedFile, key: &[u8; KEY_LEN]) -> Result<ExpansionFile, String> {
-    let nonce = decode(&sealed.nonce)?;
-    let ciphertext = decode(&sealed.ciphertext)?;
-    if nonce.len() != NONCE_LEN {
-        return Err("Couldn't read the encrypted vault.".into());
-    }
-    let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| "Couldn't read the encrypted vault.".to_string())?;
-    let plain = cipher
-        .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
-        .map_err(|_| "That PIN doesn't unlock this vault.".to_string())?;
+    let plain = crate::vault_crypto::open_bytes_with_key(raw, vault_key)?;
     serde_json::from_slice(&plain).map_err(|_| "Couldn't read the encrypted vault.".to_string())
 }
 
-fn derive(pin: &str, salt: &[u8]) -> Result<[u8; KEY_LEN], String> {
-    let params = Params::new(19_456, 2, 1, Some(KEY_LEN)).map_err(|_| "Couldn't unlock the vault.".to_string())?;
-    let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    let mut key = [0u8; KEY_LEN];
-    argon
-        .hash_password_into(pin.as_bytes(), salt, &mut key)
-        .map_err(|_| "Couldn't unlock the vault.".to_string())?;
-    Ok(key)
+pub fn seal_secrets(secrets: &[HiddenSecret], pin: &str) -> Result<(String, VaultKey), String> {
+    let plain = serde_json::to_vec(secrets)
+        .map_err(|error| format!("Couldn't encrypt hidden snippets: {error}"))?;
+    crate::vault_crypto::seal_bytes(&plain, pin)
 }
 
-fn encode(bytes: &[u8]) -> String {
-    base64::engine::general_purpose::STANDARD.encode(bytes)
+pub fn seal_secrets_with_key(
+    secrets: &[HiddenSecret],
+    vault_key: &VaultKey,
+) -> Result<String, String> {
+    let plain = serde_json::to_vec(secrets)
+        .map_err(|error| format!("Couldn't encrypt hidden snippets: {error}"))?;
+    crate::vault_crypto::seal_bytes_with_key(&plain, vault_key)
 }
 
-fn decode(value: &str) -> Result<Vec<u8>, String> {
-    base64::engine::general_purpose::STANDARD
-        .decode(value)
-        .map_err(|_| "Couldn't read the encrypted vault.".to_string())
+pub fn open_secrets(raw: &str, pin: &str) -> Result<(Vec<HiddenSecret>, VaultKey), String> {
+    let (plain, key) = crate::vault_crypto::open_bytes(raw, pin)?;
+    let secrets = serde_json::from_slice(&plain)
+        .map_err(|_| "Couldn't read the encrypted vault.".to_string())?;
+    Ok((secrets, key))
+}
+
+pub fn open_secrets_with_key(raw: &str, vault_key: &VaultKey) -> Result<Vec<HiddenSecret>, String> {
+    let plain = crate::vault_crypto::open_bytes_with_key(raw, vault_key)?;
+    serde_json::from_slice(&plain).map_err(|_| "Couldn't read the encrypted vault.".to_string())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{check_pin, open, open_with_key, seal, seal_with_key};
+    use super::{
+        VaultKey, check_pin, open, open_secrets_with_key, open_with_key, seal,
+        seal_secrets_with_key, seal_with_key,
+    };
     use crate::expansion::store::Snippet;
 
     fn sample() -> Snippet {
@@ -140,6 +72,7 @@ mod tests {
             trigger: ";sig".into(),
             text: "Thanks".into(),
             enabled: true,
+            hidden: false,
         }
     }
 
@@ -157,9 +90,26 @@ mod tests {
     }
 
     #[test]
+    fn hidden_secrets_round_trip_without_the_public_text() {
+        let secrets = vec![crate::expansion::store::HiddenSecret {
+            id: "b".into(),
+            text: "secret-value".into(),
+        }];
+        let key = VaultKey {
+            key: [7u8; 32],
+            salt: vec![1, 2, 3, 4],
+        };
+        let sealed = seal_secrets_with_key(&secrets, &key).unwrap();
+        assert!(!sealed.contains("secret-value"));
+        let opened = open_secrets_with_key(&sealed, &key).unwrap();
+        assert_eq!(opened, secrets);
+    }
+
+    #[test]
     fn a_pin_must_be_digits() {
         assert!(check_pin("12").is_err());
-        assert!(check_pin("12ab").is_err());
+        assert!(check_pin("12ab").is_ok());
         assert!(check_pin("1234").is_ok());
+        assert!(check_pin("Ab!2").is_ok());
     }
 }

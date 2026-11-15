@@ -44,7 +44,7 @@ export function TextExpansion({
 
   return (
     <section id="text-expansion" className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div id="text-expansion-header" className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3">
+      <div id="text-expansion-header" className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3">
         <div id="text-expansion-heading" className="min-w-0">
           <h1 id="text-expansion-title" className="text-base font-semibold text-zinc-100">
             Text Expansion
@@ -53,9 +53,21 @@ export function TextExpansion({
             {settingsFolder ? childPath(settingsFolder, "expansion.json") : "Saved in the settings folder, next to ce-desktop-tools.json"}
           </p>
         </div>
-        <Button id="text-expansion-folder" variant="outline" disabled={busy} onClick={onOpenSettings}>
-          <span id="text-expansion-folder-label">{settingsFolder ? "Settings folder" : "Choose settings folder"}</span>
-        </Button>
+        {!settingsFolder && (
+          <Button id="text-expansion-folder" variant="outline" disabled={busy} onClick={onOpenSettings}>
+            <span id="text-expansion-folder-label">Choose settings folder</span>
+          </Button> 
+        )}
+        {locked || needsPin ? (
+          <VaultLock
+            needsPin={needsPin}
+            busy={busy}
+            focusNonce={focusNonce}
+            compact
+            onCreate={onCreatePin}
+            onUnlock={onUnlock}
+          />
+        ) : null}
       </div>
 
       {error ? (
@@ -79,10 +91,8 @@ export function TextExpansion({
             <span id="text-expansion-choose-label">Choose settings folder</span>
           </Button>
         </div>
-      ) : locked || needsPin ? (
-        <VaultLock needsPin={needsPin} busy={busy} focusNonce={focusNonce} onCreate={onCreatePin} onUnlock={onUnlock} />
       ) : (
-        <SnippetTable snippets={snippets} busy={busy} onSave={onSave} onDraftChange={onEditorChange} />
+        <SnippetTable snippets={snippets} busy={busy} locked={locked} onSave={onSave} onDraftChange={onEditorChange} />
       )}
     </section>
   );

@@ -1,0 +1,85 @@
+import {
+  ArrowLeftRight,
+  Baseline,
+  Binary,
+  BookMarked,
+  BookOpen,
+  Braces,
+  Brackets,
+  Calculator,
+  CaseLower,
+  CaseSensitive,
+  CaseUpper,
+  Clipboard,
+  ClipboardPaste,
+  Copy,
+  Eraser,
+  FileText,
+  Globe,
+  Hash,
+  Languages,
+  Library,
+  Link,
+  Mail,
+  MapPin,
+  Parentheses,
+  Pilcrow,
+  Quote,
+  Scissors,
+  Search,
+  Space,
+  Sparkles,
+  TextQuote,
+  Type,
+  WrapText,
+  Youtube,
+  type LucideIcon,
+} from "lucide-react";
+
+const ICONS: Record<string, LucideIcon> = {
+  copy: Copy,
+  scissors: Scissors,
+  "clipboard-paste": ClipboardPaste,
+  clipboard: Clipboard,
+  search: Search,
+  link: Link,
+  "arrow-left-right": ArrowLeftRight,
+  library: Library,
+  "case-upper": CaseUpper,
+  "case-lower": CaseLower,
+  "case-sensitive": CaseSensitive,
+  "wrap-text": WrapText,
+  space: Space,
+  parentheses: Parentheses,
+  brackets: Brackets,
+  braces: Braces,
+  quote: Quote,
+  hash: Hash,
+  binary: Binary,
+  globe: Globe,
+  "book-open": BookOpen,
+  "book-marked": BookMarked,
+  languages: Languages,
+  "map-pin": MapPin,
+  youtube: Youtube,
+  sparkles: Sparkles,
+  type: Type,
+  eraser: Eraser,
+  pilcrow: Pilcrow,
+  "file-text": FileText,
+  mail: Mail,
+  calculator: Calculator,
+  baseline: Baseline,
+  "text-quote": TextQuote,
+};
+
+type PantherbarIconProps = {
+  id: string;
+  name: string;
+  className?: string;
+};
+
+export function PantherbarIcon({ id, name, className }: PantherbarIconProps) {
+  const Icon = ICONS[name] ?? Sparkles;
+  return <Icon id={id} className={className} aria-hidden="true" />;
+}

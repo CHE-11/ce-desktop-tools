@@ -180,3 +180,4 @@ function fail(message) {
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
+console.error("ce-desktop-tools dev mcp ready");

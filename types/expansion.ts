@@ -3,6 +3,7 @@ export type Snippet = {
   trigger: string;
   text: string;
   enabled: boolean;
+  hidden: boolean;
 };
 
 export type ExpansionState = {

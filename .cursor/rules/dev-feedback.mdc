@@ -13,3 +13,4 @@ When ce-desktop-tools is running from `pnpm tauri dev` (VS Code task **Run Dev**
 - `console` — recent warnings and errors
 
 Do not open the Vite URL, use browser tools, or run `vite preview`. These tools are read-only. They do not click, type triggers, or change settings. If `app_status` says the app is not running, ask for the Run Dev task instead of guessing what the window shows.
+

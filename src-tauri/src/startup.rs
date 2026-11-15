@@ -24,8 +24,8 @@ pub fn sync_run_at_startup(enabled: bool) -> Result<(), String> {
 
 #[cfg(windows)]
 fn sync_windows(enabled: bool) -> Result<(), String> {
-    use winreg::enums::HKEY_CURRENT_USER;
     use winreg::RegKey;
+    use winreg::enums::HKEY_CURRENT_USER;
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let (key, _) = hkcu
@@ -38,7 +38,8 @@ fn sync_windows(enabled: bool) -> Result<(), String> {
             Err(error) => Err(format!("Couldn't update Windows startup: {error}")),
         };
     }
-    let executable = std::env::current_exe().map_err(|error| format!("Couldn't find this application: {error}"))?;
+    let executable = std::env::current_exe()
+        .map_err(|error| format!("Couldn't find this application: {error}"))?;
     let command = format!("\"{}\" --background", executable.display());
     key.set_value(RUN_VALUE, &command)
         .map_err(|error| format!("Couldn't update Windows startup: {error}"))

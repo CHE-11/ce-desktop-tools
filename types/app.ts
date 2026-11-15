@@ -4,6 +4,7 @@ export type AppSettings = {
   shared: boolean;
   warning: string | null;
   fontZoom: number;
+  density: string;
   theme: string;
   colorMode: string;
   toolbarLabels: boolean;

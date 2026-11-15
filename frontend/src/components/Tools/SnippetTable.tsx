@@ -5,13 +5,14 @@ import type { Snippet } from "../../../../types/expansion";
 import { cn } from "../../lib/cn";
 import { Button } from "../Button";
 
-type SortKey = "trigger" | "text" | "enabled";
+type SortKey = "trigger" | "text" | "hidden" | "enabled";
 type SortDir = "asc" | "desc";
 
 type Draft = {
   key: string;
   trigger: string;
   text: string;
+  hidden: boolean;
   enabled: boolean;
   error: string | null;
 };
@@ -19,6 +20,7 @@ type Draft = {
 type RowEdit = {
   trigger: string;
   text: string;
+  hidden: boolean;
   enabled: boolean;
   error: string | null;
 };
@@ -26,11 +28,12 @@ type RowEdit = {
 type SnippetTableProps = {
   snippets: readonly Snippet[];
   busy: boolean;
+  locked: boolean;
   onSave: (snippets: Snippet[]) => Promise<void>;
   onDraftChange: (open: boolean) => void;
 };
 
-export function SnippetTable({ snippets, busy, onSave, onDraftChange }: SnippetTableProps) {
+export function SnippetTable({ snippets, busy, locked, onSave, onDraftChange }: SnippetTableProps) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("trigger");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -57,7 +60,7 @@ export function SnippetTable({ snippets, busy, onSave, onDraftChange }: SnippetT
         if (!edit || edit.error) {
           continue;
         }
-        if (edit.trigger === snippet.trigger && edit.text === snippet.text && edit.enabled === snippet.enabled) {
+        if (snippet.hidden || (edit.trigger === snippet.trigger && edit.text === snippet.text && edit.hidden === snippet.hidden && edit.enabled === snippet.enabled)) {
           delete next[snippet.id];
           changed = true;
         }
@@ -71,7 +74,7 @@ export function SnippetTable({ snippets, busy, onSave, onDraftChange }: SnippetT
   const addRow = () => {
     const key = `draft-${draftKeys.current}`;
     draftKeys.current += 1;
-    setDrafts((current) => [{ key, trigger: "", text: "", enabled: true, error: null }, ...current]);
+    setDrafts((current) => [{ key, trigger: "", text: "", hidden: false, enabled: true, error: null }, ...current]);
     setExpandedId(key);
     window.setTimeout(() => {
       document.getElementById(`snippet-trigger-${key}`)?.focus();
@@ -95,7 +98,7 @@ export function SnippetTable({ snippets, busy, onSave, onDraftChange }: SnippetT
       setEdits((current) => ({ ...current, [snippet.id]: { ...edit, error: problem } }));
       return;
     }
-    if (edit.trigger === snippet.trigger && edit.text === snippet.text && edit.enabled === snippet.enabled) {
+    if (edit.trigger === snippet.trigger && edit.text === snippet.text && edit.hidden === snippet.hidden && edit.enabled === snippet.enabled) {
       setEdits((current) => {
         if (!current[snippet.id]) {
           return current;
@@ -106,7 +109,13 @@ export function SnippetTable({ snippets, busy, onSave, onDraftChange }: SnippetT
       });
       return;
     }
-    const nextSnippet: Snippet = { id: snippet.id, trigger: edit.trigger.trim(), text: edit.text, enabled: edit.enabled };
+    const nextSnippet: Snippet = {
+      id: snippet.id,
+      trigger: edit.trigger.trim(),
+      text: snippet.hidden ? "" : edit.text,
+      enabled: edit.enabled,
+      hidden: snippet.hidden || edit.hidden,
+    };
     try {
       await persist(latest.current.map((item) => (item.id === snippet.id ? nextSnippet : item)));
       setEdits((current) => {
@@ -133,7 +142,7 @@ export function SnippetTable({ snippets, busy, onSave, onDraftChange }: SnippetT
       return;
     }
     try {
-      await persist([...latest.current, { id: "", trigger: draft.trigger.trim(), text: draft.text, enabled: draft.enabled }]);
+      await persist([...latest.current, { id: "", trigger: draft.trigger.trim(), text: draft.text, enabled: draft.enabled, hidden: draft.hidden }]);
       setDrafts((current) => current.filter((item) => item.key !== draft.key));
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Couldn't save this row.";
@@ -189,6 +198,7 @@ export function SnippetTable({ snippets, busy, onSave, onDraftChange }: SnippetT
             <tr id="snippet-table-columns">
               <SortHeader id="snippet-col-trigger" label="Trigger" sortKey="trigger" active={sortKey} dir={sortDir} onSort={toggleSort} className="w-44" />
               <SortHeader id="snippet-col-text" label="Replacement" sortKey="text" active={sortKey} dir={sortDir} onSort={toggleSort} />
+              <SortHeader id="snippet-col-hidden" label="Hidden" sortKey="hidden" active={sortKey} dir={sortDir} onSort={toggleSort} className="w-20" />
               <SortHeader id="snippet-col-enabled" label="On" sortKey="enabled" active={sortKey} dir={sortDir} onSort={toggleSort} className="w-16" />
               <th id="snippet-col-actions" className="w-10 border-b border-zinc-800" />
             </tr>
@@ -204,14 +214,24 @@ export function SnippetTable({ snippets, busy, onSave, onDraftChange }: SnippetT
                 <RowFields
                   id={draft.key}
                   trigger={draft.trigger}
-                  text={draft.text}
+                  text={draft.hidden ? "" : draft.text}
+                  hidden={draft.hidden}
                   enabled={draft.enabled}
                   error={draft.error}
                   expanded={expandedId === draft.key}
                   disabled={busy}
+                  locked={locked}
                   onExpand={() => setExpandedId(draft.key)}
                   onChange={(patch) => {
                     setDrafts((current) => current.map((item) => (item.key === draft.key ? { ...item, ...patch, error: null } : item)));
+                  }}
+                  onTriggerBlur={(value) => {
+                    const problem = duplicateTrigger(value, occupiedTriggers(snippets, edits, drafts, draft.key));
+                    setDrafts((current) =>
+                      current.map((item) =>
+                        item.key === draft.key ? { ...item, trigger: value, error: problem ?? clearDuplicate(item.error) } : item,
+                      ),
+                    );
                   }}
                 />
                 <td id={`snippet-delete-cell-${draft.key}`} className="px-1 align-top">
@@ -232,9 +252,10 @@ export function SnippetTable({ snippets, busy, onSave, onDraftChange }: SnippetT
             {shown.map((snippet) => {
               const edit = edits[snippet.id];
               const trigger = edit?.trigger ?? snippet.trigger;
-              const text = edit?.text ?? snippet.text;
+              const hidden = snippet.hidden || (edit?.hidden ?? false);
+              const text = hidden ? "" : (edit?.text ?? snippet.text);
               const enabled = edit?.enabled ?? snippet.enabled;
-              const row: RowEdit = { trigger, text, enabled, error: edit?.error ?? null };
+              const row: RowEdit = { trigger, text: hidden ? (edit?.text ?? "") : text, hidden, enabled, error: edit?.error ?? null };
               return (
                 <tr
                   id={`snippet-row-${domId(snippet.id)}`}
@@ -246,17 +267,35 @@ export function SnippetTable({ snippets, busy, onSave, onDraftChange }: SnippetT
                     id={domId(snippet.id)}
                     trigger={trigger}
                     text={text}
+                    hidden={hidden}
                     enabled={enabled}
                     error={row.error}
                     expanded={expandedId === snippet.id}
                     disabled={busy}
+                    locked={locked}
                     onExpand={() => setExpandedId(snippet.id)}
                     onChange={(patch) => {
+                      if (patch.hidden) {
+                        void commitSaved(snippet, { ...row, hidden: true });
+                        setEdits((current) => ({ ...current, [snippet.id]: { ...row, hidden: true, text: "", error: null } }));
+                        return;
+                      }
                       const next = { ...row, ...patch, error: null };
                       setEdits((current) => ({ ...current, [snippet.id]: next }));
                       if (patch.enabled !== undefined) {
                         void commitSaved(snippet, next);
                       }
+                    }}
+                    onTriggerBlur={(value) => {
+                      const problem = duplicateTrigger(value, occupiedTriggers(snippets, edits, drafts, snippet.id));
+                      setEdits((current) => ({
+                        ...current,
+                        [snippet.id]: {
+                          ...(current[snippet.id] ?? row),
+                          trigger: value,
+                          error: problem ?? clearDuplicate((current[snippet.id] ?? row).error),
+                        },
+                      }));
                     }}
                   />
                   <td id={`snippet-delete-cell-${domId(snippet.id)}`} className="px-1 align-top">
@@ -277,7 +316,7 @@ export function SnippetTable({ snippets, busy, onSave, onDraftChange }: SnippetT
             })}
             {shown.length === 0 && drafts.length === 0 ? (
               <tr id="snippet-table-empty">
-                <td id="snippet-table-empty-cell" colSpan={4} className="px-3 py-8 text-sm text-zinc-500">
+                <td id="snippet-table-empty-cell" colSpan={5} className="px-3 py-8 text-sm text-zinc-500">
                   {snippets.length === 0 ? "No snippets yet. Add a row to start." : "No snippets match this search."}
                 </td>
               </tr>
@@ -332,22 +371,28 @@ function RowFields({
   id,
   trigger,
   text,
+  hidden,
   enabled,
   error,
   expanded,
   disabled,
+  locked,
   onExpand,
   onChange,
+  onTriggerBlur,
 }: {
   id: string;
   trigger: string;
   text: string;
+  hidden: boolean;
   enabled: boolean;
   error: string | null;
   expanded: boolean;
   disabled: boolean;
+  locked: boolean;
   onExpand: () => void;
-  onChange: (patch: Partial<Pick<RowEdit, "trigger" | "text" | "enabled">>) => void;
+  onChange: (patch: Partial<Pick<RowEdit, "trigger" | "text" | "hidden" | "enabled">>) => void;
+  onTriggerBlur: (trigger: string) => void;
 }) {
   return (
     <>
@@ -361,6 +406,7 @@ function RowFields({
           placeholder=";sig"
           aria-invalid={error ? true : undefined}
           onFocus={onExpand}
+          onBlur={(event) => onTriggerBlur(event.currentTarget.value)}
           onChange={(event) => onChange({ trigger: event.target.value })}
           className="h-7 w-full rounded border border-transparent bg-transparent px-1 font-mono text-sm text-sky-300 outline-none focus:border-sky-500 focus:bg-zinc-950 disabled:opacity-50"
         />
@@ -373,14 +419,47 @@ function RowFields({
       <td id={`snippet-text-cell-${id}`} className="px-2 py-1 align-top">
         <textarea
           id={`snippet-text-${id}`}
-          value={text}
-          disabled={disabled}
-          rows={expanded ? 3 : 1}
-          spellCheck
-          title={text}
+          value={hidden ? "" : text}
+          disabled={disabled || hidden}
+          readOnly={hidden}
+          rows={expanded && !hidden ? 3 : 1}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder={hidden ? (locked ? "Locked" : "Hidden") : ""}
+          title={
+            hidden
+              ? locked
+                ? "Enter the PIN to paste this snippet."
+                : "Hidden. Delete this row and add it again to change the replacement."
+              : text
+          }
           onFocus={onExpand}
           onChange={(event) => onChange({ text: event.target.value })}
           className="w-full resize-none rounded border border-transparent bg-transparent px-1 py-1 text-sm text-zinc-200 outline-none focus:border-sky-500 focus:bg-zinc-950 disabled:opacity-50"
+        />
+      </td>
+      <td id={`snippet-hidden-cell-${id}`} className="px-2 py-1 text-center align-top">
+        <input
+          id={`snippet-hidden-${id}`}
+          type="checkbox"
+          checked={hidden}
+          disabled={disabled || hidden || locked}
+          aria-label={hidden ? (locked ? "Replacement locked" : "Replacement hidden") : "Hide replacement"}
+          title={
+            hidden
+              ? locked
+                ? "Enter the PIN to paste this snippet."
+                : "Delete this row and add it again to change the replacement."
+              : locked
+                ? "Enter the PIN before hiding a replacement."
+                : "Hide the replacement in this app"
+          }
+          onChange={(event) => {
+            if (event.target.checked) {
+              onChange({ hidden: true });
+            }
+          }}
+          className="mt-1.5 size-3.5 accent-sky-500 disabled:opacity-50"
         />
       </td>
       <td id={`snippet-enabled-cell-${id}`} className="px-2 py-1 text-center align-top">
@@ -404,15 +483,18 @@ function filterAndSort(snippets: readonly Snippet[], query: string, sortKey: Sor
     if (!needle) {
       return true;
     }
-    return snippet.trigger.toLowerCase().includes(needle) || snippet.text.toLowerCase().includes(needle);
+    return snippet.trigger.toLowerCase().includes(needle) || (!snippet.hidden && snippet.text.toLowerCase().includes(needle));
   });
   const direction = sortDir === "asc" ? 1 : -1;
   return filtered.sort((left, right) => {
     if (sortKey === "enabled") {
       return (Number(left.enabled) - Number(right.enabled)) * direction;
     }
-    const leftValue = sortKey === "trigger" ? left.trigger : left.text;
-    const rightValue = sortKey === "trigger" ? right.trigger : right.text;
+    if (sortKey === "hidden") {
+      return (Number(left.hidden) - Number(right.hidden)) * direction;
+    }
+    const leftValue = sortKey === "trigger" ? left.trigger : left.hidden ? "" : left.text;
+    const rightValue = sortKey === "trigger" ? right.trigger : right.hidden ? "" : right.text;
     return leftValue.localeCompare(rightValue, undefined, { sensitivity: "base", numeric: true }) * direction;
   });
 }
@@ -428,10 +510,36 @@ function validate(trigger: string, snippets: readonly { id: string; trigger: str
   if (nextTrigger.length > 64) {
     return "A trigger is limited to 64 characters.";
   }
+  return duplicateTrigger(nextTrigger, snippets);
+}
+
+function occupiedTriggers(
+  snippets: readonly Snippet[],
+  edits: Record<string, RowEdit>,
+  drafts: readonly Draft[],
+  exceptId: string,
+) {
+  return [
+    ...snippets
+      .filter((item) => item.id !== exceptId)
+      .map((item) => ({ trigger: edits[item.id]?.trigger ?? item.trigger })),
+    ...draftTriggers(drafts, exceptId),
+  ];
+}
+
+function duplicateTrigger(trigger: string, snippets: readonly { trigger: string }[]) {
+  const nextTrigger = trigger.trim();
+  if (!nextTrigger) {
+    return null;
+  }
   if (snippets.some((item) => item.trigger.trim() === nextTrigger)) {
     return `Trigger "${nextTrigger}" is already used.`;
   }
   return null;
+}
+
+function clearDuplicate(error: string | null) {
+  return error?.includes("already used") ? null : error;
 }
 
 function draftTriggers(drafts: readonly Draft[], exceptKey: string): { id: string; trigger: string }[] {

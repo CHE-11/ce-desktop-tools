@@ -1,5 +1,6 @@
 import { Lock, Pause, Play, Settings } from "lucide-react";
-import { Button } from "./Button";
+import { Button } from "../Button";
+import { StylesMenu } from "./StylesMenu";
 
 type ToolbarProps = {
   labels: boolean;
@@ -39,6 +40,7 @@ export function Toolbar({ labels, enabled, canLock, onToggleExpansion, onLock, o
           {labels ? <span id="toolbar-lock-label">Lock</span> : null}
         </Button>
       ) : null}
+      <StylesMenu labels={labels} />
       <Button id="toolbar-settings" variant="ghost" size="sm" title="Settings" onClick={onSettings}>
         <Settings id="toolbar-settings-icon" className="size-4" aria-hidden="true" />
         {labels ? <span id="toolbar-settings-label">Settings</span> : null}

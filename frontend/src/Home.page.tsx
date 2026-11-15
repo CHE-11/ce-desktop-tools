@@ -1,24 +1,44 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useState } from "react";
-import type { AppSettings } from "../../../types/app";
-import type { ExpansionState, Snippet } from "../../../types/expansion";
-import { CommandPalette, type CommandItem } from "../components/CommandPalette";
-import { SettingsDialog } from "../components/Dialogs/Settings/SettingsDialog";
-import { UpdateDialog } from "../components/Dialogs/UpdateDialog";
-import { StatusBar } from "../components/StatusBar";
-import { Toolbar } from "../components/Toolbar";
-import { TextExpansion } from "../components/Tools/TextExpansion";
-import { applyUserThemeCss, normalizeColorMode, normalizeTheme, publishAppearance } from "../lib/appearance";
-import { appSettings, themeCss } from "../lib/app-client";
-import { cn } from "../lib/cn";
-import { useDevFeedback } from "../lib/dev-feedback";
-import { expansionState, lockVault, saveExpansions, setExpansionEnabled, unlockVault, createVaultPin } from "../lib/expansion-client";
-import { messageOf } from "../lib/message";
-import { TOOLS, type ToolId } from "../lib/tools";
-import { publishToolbarLabels, readToolbarLabels } from "../lib/toolbar-labels";
-import { useAppUpdate } from "../lib/use-app-update";
-import { publishZoom } from "../lib/zoom";
+import type { AppSettings } from "../../types/app";
+import type { ExpansionState, Snippet } from "../../types/expansion";
+import { AppSidebar } from "./components/AppSidebar";
+import { CommandPalette, type CommandItem } from "./components/CommandPalette";
+import { SettingsDialog } from "./components/Dialogs/Settings/SettingsDialog";
+import { UpdateDialog } from "./components/Dialogs/UpdateDialog";
+import { StatusBar } from "./components/StatusBar";
+import { Toolbar } from "./components/Toolbar/Toolbar";
+import { TextExpansion } from "./components/Tools/TextExpansion";
+import { CommonMisspells } from "./components/Tools/CommonMisspells";
+import { DateExpander } from "./components/Tools/DateExpander";
+import { AsciiCodes } from "./components/Tools/AsciiCodes";
+import { Clipboard } from "./components/Tools/Clipboard";
+import { MegaClip } from "./components/Tools/MegaClip";
+import { KeyboardShortcuts } from "./components/Tools/KeyboardShortcuts";
+import { BatchRename } from "./components/Tools/BatchRename";
+import { Pantherbar } from "./components/Tools/Pantherbar";
+import { applyUserThemeCss, normalizeColorMode, normalizeTheme, publishAppearance } from "./lib/appearance";
+import { publishDensity } from "./lib/density";
+import { appSettings, themeCss } from "./lib/app-client";
+import { useDevFeedback } from "./lib/dev-feedback";
+import { expansionState, lockVault, saveExpansions, setExpansionEnabled, unlockVault, createVaultPin } from "./lib/expansion-client";
+import { messageOf } from "./lib/message";
+import type { ToolId } from "./lib/tools";
+import { publishToolbarLabels, readToolbarLabels } from "./lib/toolbar-labels";
+import { useAppUpdate } from "./lib/use-app-update";
+import { publishZoom } from "./lib/zoom";
+
+function keepUnlockedSnippets(current: ExpansionState, next: ExpansionState): ExpansionState {
+  if (!next.locked || next.snippets.length > 0) {
+    return next;
+  }
+  const visible = current.snippets.filter((snippet) => !snippet.hidden);
+  if (visible.length === 0) {
+    return next;
+  }
+  return { ...next, snippets: visible };
+}
 
 const EMPTY_EXPANSION: ExpansionState = {
   settingsFolder: "",
@@ -50,6 +70,7 @@ export function HomePage() {
       return;
     }
     publishAppearance(normalizeTheme(next.theme), normalizeColorMode(next.colorMode));
+    publishDensity(next.density);
     publishZoom(next.fontZoom);
     publishToolbarLabels(next.toolbarLabels);
     setLabels(next.toolbarLabels);
@@ -84,7 +105,7 @@ export function HomePage() {
   useEffect(() => {
     const subscriptions = [
       listen<ExpansionState>("expansion-changed", (event) => {
-        setExpansion(event.payload);
+        setExpansion((current) => keepUnlockedSnippets(current, event.payload));
       }),
       listen<boolean>("expansion-enabled", (event) => {
         setExpansion((current) => ({ ...current, enabled: event.payload }));
@@ -92,6 +113,9 @@ export function HomePage() {
       listen("expansion-unlock-request", () => {
         setTool("expansion");
         setFocusNonce((value) => value + 1);
+      }),
+      listen("pantherbar-open", () => {
+        setTool("pantherbar");
       }),
     ];
     return () => {
@@ -137,7 +161,8 @@ export function HomePage() {
 
   const lock = useCallback(async () => {
     try {
-      setExpansion(await lockVault());
+      const next = await lockVault();
+      setExpansion((current) => keepUnlockedSnippets(current, next));
       setFocusNonce((value) => value + 1);
     } catch (caught) {
       setError(messageOf(caught));
@@ -217,31 +242,7 @@ export function HomePage() {
         </p>
       ) : null}
       <div id="app-body" className="flex min-h-0 flex-1">
-        <aside id="app-sidebar" className="flex w-56 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900">
-          <p id="app-sidebar-label" className="px-3 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-zinc-500 uppercase">
-            Menu
-          </p>
-          <nav id="app-menu" aria-label="Tools" className="flex flex-col gap-0.5 px-2 pb-2">
-            {TOOLS.map((entry) => {
-              const selected = tool === entry.id;
-              return (
-                <button
-                  id={`app-menu-${entry.id}`}
-                  key={entry.id}
-                  type="button"
-                  aria-current={selected ? "page" : undefined}
-                  onClick={() => setTool(entry.id)}
-                  className={cn(
-                    "rounded-md px-2.5 py-2 text-left text-sm",
-                    selected ? "bg-zinc-800 font-medium text-zinc-100" : "text-zinc-300 hover:bg-zinc-800",
-                  )}
-                >
-                  <span id={`app-menu-${entry.id}-label`}>{entry.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </aside>
+        <AppSidebar tool={tool} locked={expansion.locked} onSelect={setTool} />
         <main id="tool-panel" className="flex min-h-0 min-w-0 flex-1 flex-col">
           {tool === "expansion" ? (
             <TextExpansion
@@ -260,6 +261,25 @@ export function HomePage() {
               onEditorChange={setSnippetOpen}
             />
           ) : null}
+          {tool === "misspell" ? <CommonMisspells onOpenSettings={() => setSettingsOpen(true)} /> : null}
+          {tool === "date" ? <DateExpander onOpenSettings={() => setSettingsOpen(true)} /> : null}
+          {tool === "ascii" ? <AsciiCodes onOpenSettings={() => setSettingsOpen(true)} /> : null}
+          {tool === "clipboard" ? (
+            <Clipboard
+              settingsFolder={expansion.settingsFolder}
+              locked={expansion.locked}
+              needsPin={expansion.needsPin}
+              busy={busy}
+              focusNonce={focusNonce}
+              onOpenSettings={() => setSettingsOpen(true)}
+              onCreatePin={(pin) => submitPin(pin, true)}
+              onUnlock={(pin) => submitPin(pin, false)}
+            />
+          ) : null}
+          {tool === "megaclip" ? <MegaClip /> : null}
+          {tool === "app-shortcuts" ? <KeyboardShortcuts onOpenSettings={() => setSettingsOpen(true)} /> : null}
+          {tool === "rename" ? <BatchRename /> : null}
+          {tool === "pantherbar" ? <Pantherbar /> : null}
         </main>
       </div>
       <StatusBar

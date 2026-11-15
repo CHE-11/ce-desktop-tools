@@ -1,6 +1,7 @@
 use serde::Serialize;
 
-const LATEST_URL: &str = "https://github.com/CHE-11/ce-desktop-tools/releases/latest/download/latest.json";
+const LATEST_URL: &str =
+    "https://github.com/CHE-11/ce-desktop-tools/releases/latest/download/latest.json";
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

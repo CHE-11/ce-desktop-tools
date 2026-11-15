@@ -399,7 +399,9 @@ mod tests {
     #[test]
     fn disabled_feedback_rejects_snapshots() {
         let feedback = DevFeedback::disabled();
-        let error = feedback.store(json!({"title": "ce-desktop-tools"})).unwrap_err();
+        let error = feedback
+            .store(json!({"title": "ce-desktop-tools"}))
+            .unwrap_err();
         assert!(error.contains("unavailable"));
         assert_eq!(feedback.current(), EMPTY_BODY);
     }
@@ -487,13 +489,19 @@ mod tests {
         stream.read_to_string(&mut response).unwrap();
         assert!(response.contains("200 OK"), "{response}");
         #[cfg(debug_assertions)]
-        assert!(response.contains("\"title\":\"ce-desktop-tools\""), "{response}");
+        assert!(
+            response.contains("\"title\":\"ce-desktop-tools\""),
+            "{response}"
+        );
         server.join().unwrap();
     }
 
     #[test]
     fn port_file_round_trip() {
-        let dir = std::env::temp_dir().join(format!("ce-desktop-tools-dev-feedback-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "ce-desktop-tools-dev-feedback-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("ce-desktop-tools-dev.json");
@@ -515,7 +523,9 @@ mod tests {
     #[test]
     fn start_does_not_open_a_port() {
         let feedback = Arc::new(DevFeedback::enabled());
-        let error = feedback.store(json!({"title": "ce-desktop-tools"})).unwrap_err();
+        let error = feedback
+            .store(json!({"title": "ce-desktop-tools"}))
+            .unwrap_err();
         assert!(error.contains("unavailable"));
         start(Arc::clone(&feedback)).unwrap();
         assert!(!BOUND.load(Ordering::SeqCst));

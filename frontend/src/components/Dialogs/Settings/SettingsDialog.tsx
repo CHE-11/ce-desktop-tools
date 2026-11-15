@@ -10,11 +10,13 @@ import {
   type ColorMode,
   type ThemeId,
 } from "../../../lib/appearance";
-import { appExecutable, appSettings, previewAppSettings, revealPath, saveAppSettings } from "../../../lib/app-client";
+import { appExecutable, appSettings, appVersion, previewAppSettings, revealPath, saveAppSettings } from "../../../lib/app-client";
 import { messageOf, pickedFolderPath } from "../../../lib/message";
+import { publishDensity, readDensity } from "../../../lib/density";
 import { publishToolbarLabels, readToolbarLabels } from "../../../lib/toolbar-labels";
 import { publishZoom, readZoom } from "../../../lib/zoom";
 import { Button } from "../../Button";
+import { ChangePin } from "../../Tools/ChangePin";
 import { Dialog } from "../Dialog";
 import { AppSettingsTab } from "./AppSettingsTab";
 
@@ -26,10 +28,31 @@ type SettingsDialogProps = {
   checkingUpdates: boolean;
 };
 
+type SettingsSnapshot = {
+  folder: string;
+  zoom: number;
+  theme: ThemeId;
+  colorMode: ColorMode;
+  toolbarLabels: boolean;
+  runAtStartup: boolean;
+};
+
+function sameSettings(left: SettingsSnapshot, right: SettingsSnapshot) {
+  return (
+    left.folder === right.folder &&
+    left.zoom === right.zoom &&
+    left.theme === right.theme &&
+    left.colorMode === right.colorMode &&
+    left.toolbarLabels === right.toolbarLabels &&
+    left.runAtStartup === right.runAtStartup
+  );
+}
+
 export function SettingsDialog({ open, onClose, onSaved, onCheckForUpdates, checkingUpdates }: SettingsDialogProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [exePath, setExePath] = useState("");
+  const [version, setVersion] = useState("");
   const [folder, setFolder] = useState("");
   const [zoom, setZoom] = useState(readZoom);
   const [theme, setTheme] = useState<ThemeId>(readAppearance().theme);
@@ -38,10 +61,12 @@ export function SettingsDialog({ open, onClose, onSaved, onCheckForUpdates, chec
   const [runAtStartup, setRunAtStartup] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState<SettingsSnapshot | null>(null);
   const opened = useRef({
     theme: readAppearance().theme,
     colorMode: readAppearance().colorMode,
     zoom: readZoom(),
+    density: readDensity(),
     toolbarLabels: readToolbarLabels(),
   });
 
@@ -51,39 +76,58 @@ export function SettingsDialog({ open, onClose, onSaved, onCheckForUpdates, chec
     }
     let cancelled = false;
     setLoading(true);
+    setLoaded(null);
     setError(null);
     const appearance = readAppearance();
     opened.current = {
       theme: appearance.theme,
       colorMode: appearance.colorMode,
       zoom: readZoom(),
+      density: readDensity(),
       toolbarLabels: readToolbarLabels(),
     };
     void (async () => {
       try {
-        const [settings, executable] = await Promise.all([appSettings(), appExecutable().catch(() => "")]);
+        const [settings, executable, currentVersion] = await Promise.all([
+          appSettings(),
+          appExecutable().catch(() => ""),
+          appVersion().catch(() => ""),
+        ]);
         if (cancelled) {
           return;
         }
-        setFolder(settings.settingsFolder);
+        const snapshot: SettingsSnapshot = settings.shared
+          ? {
+              folder: settings.settingsFolder,
+              zoom: settings.fontZoom,
+              theme: normalizeTheme(settings.theme),
+              colorMode: normalizeColorMode(settings.colorMode),
+              toolbarLabels: settings.toolbarLabels,
+              runAtStartup: settings.runAtStartup,
+            }
+          : {
+              folder: settings.settingsFolder,
+              zoom: readZoom(),
+              theme: appearance.theme,
+              colorMode: appearance.colorMode,
+              toolbarLabels: readToolbarLabels(),
+              runAtStartup: settings.runAtStartup,
+            };
+        setFolder(snapshot.folder);
         setWarning(settings.warning);
         setExePath(executable);
-        setRunAtStartup(settings.runAtStartup);
+        setVersion(currentVersion);
+        setRunAtStartup(snapshot.runAtStartup);
+        setTheme(snapshot.theme);
+        setColorMode(snapshot.colorMode);
+        setZoom(snapshot.zoom);
+        setToolbarLabels(snapshot.toolbarLabels);
+        setLoaded(snapshot);
         if (settings.shared) {
-          const nextTheme = normalizeTheme(settings.theme);
-          const nextMode = normalizeColorMode(settings.colorMode);
-          setTheme(nextTheme);
-          setColorMode(nextMode);
-          setZoom(settings.fontZoom);
-          setToolbarLabels(settings.toolbarLabels);
-          publishAppearance(nextTheme, nextMode);
-          publishZoom(settings.fontZoom);
-          publishToolbarLabels(settings.toolbarLabels);
-        } else {
-          setTheme(appearance.theme);
-          setColorMode(appearance.colorMode);
-          setZoom(readZoom());
-          setToolbarLabels(readToolbarLabels());
+          publishAppearance(snapshot.theme, snapshot.colorMode);
+          publishZoom(snapshot.zoom);
+          publishDensity(settings.density);
+          publishToolbarLabels(snapshot.toolbarLabels);
         }
       } catch (caught) {
         if (!cancelled) {
@@ -103,6 +147,7 @@ export function SettingsDialog({ open, onClose, onSaved, onCheckForUpdates, chec
   const restore = () => {
     publishAppearance(opened.current.theme, opened.current.colorMode);
     publishZoom(opened.current.zoom);
+    publishDensity(opened.current.density);
     publishToolbarLabels(opened.current.toolbarLabels);
     applyAppearance(opened.current.theme, opened.current.colorMode);
   };
@@ -154,6 +199,7 @@ export function SettingsDialog({ open, onClose, onSaved, onCheckForUpdates, chec
       });
       publishAppearance(saved.theme, saved.colorMode);
       publishZoom(saved.fontZoom);
+      publishDensity(saved.density);
       publishToolbarLabels(saved.toolbarLabels);
       onSaved(saved);
       onClose();
@@ -165,14 +211,36 @@ export function SettingsDialog({ open, onClose, onSaved, onCheckForUpdates, chec
   };
 
   const busy = loading || saving;
+  const dirty =
+    loaded !== null &&
+    !sameSettings(loaded, { folder, zoom, theme, colorMode, toolbarLabels, runAtStartup });
 
   return (
-    <Dialog id="settings-dialog" title="Settings" open={open} onClose={requestClose} panelClassName="max-w-3xl">
+    <Dialog
+      id="settings-dialog"
+      title="Settings"
+      open={open}
+      onClose={requestClose}
+      panelClassName="max-w-3xl"
+      headerActions={
+        dirty ? (
+          <>
+            <Button id="app-settings-cancel" variant="ghost" onClick={requestClose} disabled={saving}>
+              <span id="app-settings-cancel-label">Cancel</span>
+            </Button>
+            <Button id="app-settings-save" variant="primary" onClick={() => void save()} disabled={busy}>
+              <span id="app-settings-save-label">{saving ? "Saving…" : "Save"}</span>
+            </Button>
+          </>
+        ) : null
+      }
+    >
       {loading ? (
         <p id="settings-loading" className="text-sm text-zinc-400">
           Loading settings…
         </p>
       ) : (
+        <>
         <AppSettingsTab
           busy={busy}
           exePath={exePath}
@@ -207,15 +275,16 @@ export function SettingsDialog({ open, onClose, onSaved, onCheckForUpdates, chec
           checkingUpdates={checkingUpdates}
           onSubmit={() => void save()}
         />
+        <div id="settings-change-pin" className="mt-3">
+          <ChangePin busy={busy} />
+        </div>
+        {version ? (
+          <p id="settings-version" className="mt-3 text-xs text-zinc-500">
+            Version {version}
+          </p>
+        ) : null}
+        </>
       )}
-      <div id="app-settings-actions" className="mt-4 flex justify-end gap-2">
-        <Button id="app-settings-cancel" variant="ghost" onClick={requestClose} disabled={saving}>
-          <span id="app-settings-cancel-label">Cancel</span>
-        </Button>
-        <Button id="app-settings-save" variant="primary" onClick={() => void save()} disabled={busy}>
-          <span id="app-settings-save-label">{saving ? "Saving…" : "Save"}</span>
-        </Button>
-      </div>
     </Dialog>
   );
 }

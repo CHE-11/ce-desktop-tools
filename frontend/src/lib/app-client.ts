@@ -30,6 +30,10 @@ export function previewAppSettings(settingsFolder: string) {
   return invoke<AppSettings>("preview_app_settings", { settingsFolder });
 }
 
+export function patchAppSettings(patch: { fontZoom?: number; density?: string }) {
+  return invoke<void>("patch_app_settings", { patch });
+}
+
 export function themeCss() {
   return invoke<string>("theme_css");
 }

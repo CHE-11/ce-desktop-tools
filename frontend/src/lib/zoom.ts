@@ -32,8 +32,19 @@ export function readZoom() {
   }
 }
 
+export const FONT_SIZE_OPTIONS = [
+  { id: "extra-small", label: "Extra Small", zoom: 80 },
+  { id: "small", label: "Small", zoom: 90 },
+  { id: "regular", label: "Regular", zoom: 100 },
+  { id: "large", label: "Large", zoom: 120 },
+  { id: "extra-large", label: "Extra Large", zoom: 140 },
+] as const;
+
 export function applyZoom(percent: number) {
-  document.documentElement.style.fontSize = `${(BASE_FONT_PX * percent) / 100}px`;
+  const scale = percent / 100;
+  const root = document.documentElement;
+  root.style.fontSize = `${BASE_FONT_PX * scale}px`;
+  root.style.setProperty("--font-scale", String(scale));
 }
 
 function rememberZoom(percent: number) {

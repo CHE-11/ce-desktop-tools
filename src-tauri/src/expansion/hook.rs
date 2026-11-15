@@ -107,7 +107,7 @@ pub fn stop(_state: &HookState) {}
 #[cfg(windows)]
 fn run(state: Arc<HookState>) {
     use windows::Win32::UI::WindowsAndMessaging::{
-        DispatchMessageW, GetMessageW, TranslateMessage, UnhookWindowsHookEx, MSG, WM_APP,
+        DispatchMessageW, GetMessageW, MSG, TranslateMessage, UnhookWindowsHookEx, WM_APP,
     };
 
     STATE.set(Arc::clone(&state)).ok();
@@ -119,9 +119,10 @@ fn run(state: Arc<HookState>) {
                 return;
             }
         };
-        state
-            .thread_id
-            .store(windows::Win32::System::Threading::GetCurrentThreadId(), Ordering::SeqCst);
+        state.thread_id.store(
+            windows::Win32::System::Threading::GetCurrentThreadId(),
+            Ordering::SeqCst,
+        );
         let mut message = MSG::default();
         loop {
             let status = GetMessageW(&mut message, None, 0, 0);
@@ -180,7 +181,8 @@ unsafe extern "system" fn hook_proc(
     if message != WM_KEYDOWN && message != WM_SYSKEYDOWN {
         return unsafe { CallNextHookEx(None, code, wparam, lparam) };
     }
-    let info = unsafe { &*(lparam.0 as *const windows::Win32::UI::WindowsAndMessaging::KBDLLHOOKSTRUCT) };
+    let info =
+        unsafe { &*(lparam.0 as *const windows::Win32::UI::WindowsAndMessaging::KBDLLHOOKSTRUCT) };
     if is_ours(info) {
         return unsafe { CallNextHookEx(None, code, wparam, lparam) };
     }
@@ -225,11 +227,15 @@ fn on_key(info: &windows::Win32::UI::WindowsAndMessaging::KBDLLHOOKSTRUCT) -> bo
         }
         return false;
     };
-    let snippets = state.snippets.read().map(|guard| guard.clone()).unwrap_or_default();
+    let snippets = state
+        .snippets
+        .read()
+        .map(|guard| guard.clone())
+        .unwrap_or_default();
     let Some(hit) = matcher.push(ch, &snippets) else {
         return false;
     };
-    if state.locked.load(Ordering::Relaxed) {
+    if hit.secret {
         matcher.clear();
         request_unlock(state);
         return false;
@@ -245,7 +251,10 @@ fn request_unlock(state: &HookState) {
     use windows::Win32::System::Threading::GetCurrentThreadId;
     use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_APP};
 
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|duration| duration.as_millis() as u64).unwrap_or(0);
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0);
     let previous = state.last_notice.load(Ordering::Relaxed);
     if now.saturating_sub(previous) < 1500 {
         return;
@@ -262,12 +271,20 @@ fn schedule(state: &HookState, hit: &ExpansionHit) {
     use windows::Win32::System::Threading::GetCurrentThreadId;
     use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_APP};
 
-    let backspaces = hit.trigger.chars().count().saturating_sub(1);
+    let backspaces = match hit.ending {
+        Some(_) => hit.trigger.chars().count(),
+        None => hit.trigger.chars().count().saturating_sub(1),
+    };
+    let mut text = if hit.timed {
+        crate::date_expand::render_now(&hit.text)
+    } else {
+        hit.text.clone()
+    };
+    if let Some(ch) = hit.ending {
+        text.push(ch);
+    }
     if let Ok(mut pending) = state.pending.lock() {
-        *pending = Some(Pending {
-            backspaces,
-            text: hit.text.clone(),
-        });
+        *pending = Some(Pending { backspaces, text });
     }
     unsafe {
         let _ = PostThreadMessageW(GetCurrentThreadId(), WM_APP + 1, WPARAM(0), LPARAM(0));
@@ -291,7 +308,10 @@ fn shortcut_clears_buffer(_vk: u16) -> bool {
 
 #[cfg(windows)]
 fn is_down(vk: u16) -> bool {
-    unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(vk as i32) as u16 & 0x8000 != 0 }
+    unsafe {
+        windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(vk as i32) as u16 & 0x8000
+            != 0
+    }
 }
 
 #[cfg(windows)]
@@ -337,7 +357,8 @@ fn foreground_is_us(our_pid: u32) -> bool {
 fn menu_is_open() -> bool {
     use std::mem::{size_of, zeroed};
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId, GUITHREADINFO, GUI_INMENUMODE,
+        GUI_INMENUMODE, GUITHREADINFO, GetForegroundWindow, GetGUIThreadInfo,
+        GetWindowThreadProcessId,
     };
     unsafe {
         let foreground = GetForegroundWindow();
@@ -354,30 +375,92 @@ fn menu_is_open() -> bool {
     }
 }
 
+/// Space, Enter, and Tab end a word on every layout. The hook thread's keyboard
+/// state often does not list the key that is going down, and `ToUnicode` then
+/// returns nothing for Space. Treating that as "not a character" used to drop
+/// the typed word, so `dont` never became `don't`.
+#[cfg(windows)]
+fn boundary_char(vk: u16) -> Option<char> {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{VK_RETURN, VK_SPACE, VK_TAB};
+    if vk == VK_SPACE.0 {
+        Some(' ')
+    } else if vk == VK_RETURN.0 {
+        Some('\n')
+    } else if vk == VK_TAB.0 {
+        Some('\t')
+    } else {
+        None
+    }
+}
+
 #[cfg(windows)]
 fn key_char(vk: u16, scan: u32) -> Option<char> {
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        GetKeyboardLayout, GetKeyboardState, ToUnicodeEx, VK_PACKET,
+        GetKeyboardLayout, GetKeyboardState, ToUnicodeEx, VK_CAPITAL, VK_PACKET,
     };
     use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    if let Some(ch) = boundary_char(vk) {
+        return Some(ch);
+    }
     if vk == VK_PACKET.0 {
-        return None;
+        return char::from_u32(scan).filter(|ch| !ch.is_control());
     }
     let mut state = [0u8; 256];
     unsafe {
-        if GetKeyboardState(&mut state).is_err() {
-            return None;
-        }
+        // The hook thread often has no keyboard state of its own. A failure
+        // here used to discard the key and forget the word typed so far.
+        let _ = GetKeyboardState(&mut state);
         overlay_modifiers(&mut state);
+        if (vk as usize) < state.len() {
+            state[vk as usize] |= 0x80;
+        }
         let thread = GetWindowThreadProcessId(GetForegroundWindow(), None);
         let layout = GetKeyboardLayout(thread);
         let mut buffer = [0u16; 8];
         let written = ToUnicodeEx(vk as u32, scan, &state, &mut buffer, 0, Some(layout));
-        if written <= 0 {
+        if written > 0 {
+            return String::from_utf16_lossy(&buffer[..written as usize])
+                .chars()
+                .next();
+        }
+        if written < 0 {
             return None;
         }
-        String::from_utf16_lossy(&buffer[..written as usize]).chars().next()
+        ascii_from_vk(
+            vk,
+            shift_down(&state),
+            state[VK_CAPITAL.0 as usize] & 0x01 != 0 || caps_on(),
+        )
     }
+}
+
+#[cfg(windows)]
+fn shift_down(state: &[u8; 256]) -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::VK_SHIFT;
+    state[VK_SHIFT.0 as usize] & 0x80 != 0
+}
+
+#[cfg(windows)]
+fn caps_on() -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::VK_CAPITAL;
+    unsafe {
+        windows::Win32::UI::Input::KeyboardAndMouse::GetKeyState(VK_CAPITAL.0 as i32) & 1 != 0
+    }
+}
+
+/// Used when `ToUnicode` cannot name the key. Letters still have to land in the
+/// matcher, or a later space has nothing to correct.
+#[cfg(windows)]
+fn ascii_from_vk(vk: u16, shift: bool, caps: bool) -> Option<char> {
+    if (u16::from(b'A')..=u16::from(b'Z')).contains(&vk) {
+        let upper = shift ^ caps;
+        let ch = char::from(vk as u8);
+        return Some(if upper { ch } else { ch.to_ascii_lowercase() });
+    }
+    if !shift && (u16::from(b'0')..=u16::from(b'9')).contains(&vk) {
+        return Some(char::from(vk as u8));
+    }
+    None
 }
 
 #[cfg(windows)]
@@ -407,8 +490,8 @@ const INJECT_MARK: usize = 0xCE70_0E01;
 #[cfg(windows)]
 fn inject(backspaces: usize, text: &str) {
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE,
-        VIRTUAL_KEY, VK_BACK, VK_RETURN, VK_TAB,
+        INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, SendInput,
+        VIRTUAL_KEY, VK_BACK, VK_RETURN, VK_SPACE, VK_TAB,
     };
 
     let mut inputs = Vec::new();
@@ -430,6 +513,9 @@ fn inject(backspaces: usize, text: &str) {
         } else if ch == '\t' {
             push_vk(&mut inputs, VK_TAB, false);
             push_vk(&mut inputs, VK_TAB, true);
+        } else if ch == ' ' {
+            push_vk(&mut inputs, VK_SPACE, false);
+            push_vk(&mut inputs, VK_SPACE, true);
         } else {
             let mut units = [0u16; 2];
             let count = ch.encode_utf16(&mut units).len();
@@ -456,7 +542,11 @@ fn inject(backspaces: usize, text: &str) {
                 ki: KEYBDINPUT {
                     wVk: vk,
                     wScan: 0,
-                    dwFlags: if up { KEYEVENTF_KEYUP } else { KEYBD_EVENT_FLAGS(0) },
+                    dwFlags: if up {
+                        KEYEVENTF_KEYUP
+                    } else {
+                        KEYBD_EVENT_FLAGS(0)
+                    },
                     time: 0,
                     dwExtraInfo: INJECT_MARK,
                 },
@@ -482,5 +572,26 @@ fn inject(backspaces: usize, text: &str) {
                 },
             },
         });
+    }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::{ascii_from_vk, boundary_char};
+
+    #[test]
+    fn space_ends_a_word_without_asking_the_layout() {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{VK_RETURN, VK_SPACE, VK_TAB};
+        assert_eq!(boundary_char(VK_SPACE.0), Some(' '));
+        assert_eq!(boundary_char(VK_RETURN.0), Some('\n'));
+        assert_eq!(boundary_char(VK_TAB.0), Some('\t'));
+        assert_eq!(boundary_char(u16::from(b'D')), None);
+    }
+
+    #[test]
+    fn a_letter_still_counts_when_the_layout_call_fails() {
+        assert_eq!(ascii_from_vk(u16::from(b'D'), false, false), Some('d'));
+        assert_eq!(ascii_from_vk(u16::from(b'D'), true, false), Some('D'));
+        assert_eq!(ascii_from_vk(u16::from(b'D'), false, true), Some('D'));
     }
 }

@@ -17,6 +17,10 @@ export function createVaultPin(pin: string) {
   return invoke<ExpansionState>("create_vault_pin", { pin });
 }
 
+export function changeVaultPin(current: string, next: string) {
+  return invoke<ExpansionState>("change_vault_pin", { current, next });
+}
+
 export function unlockVault(pin: string) {
   return invoke<ExpansionState>("unlock_vault", { pin });
 }

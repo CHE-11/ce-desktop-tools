@@ -17,6 +17,8 @@ const MAX_ZOOM: u32 = 160;
 const ZOOM_STEP: u32 = 10;
 const DEFAULT_THEME: &str = "zinc";
 const DEFAULT_COLOR_MODE: &str = "dark";
+const DEFAULT_DENSITY: &str = "default";
+const DENSITIES: &[&str] = &["cozy", "default", "compact"];
 const THEMES: &[&str] = &[
     "zinc",
     "nord",
@@ -100,6 +102,7 @@ pub struct AppSettings {
     pub shared: bool,
     pub warning: Option<String>,
     pub font_zoom: u32,
+    pub density: String,
     pub theme: String,
     pub color_mode: String,
     pub toolbar_labels: bool,
@@ -110,11 +113,16 @@ pub struct AppSettings {
 #[serde(rename_all = "camelCase", default)]
 pub struct AppSettingsPatch {
     pub font_zoom: Option<u32>,
+    #[serde(default)]
+    pub density: Option<String>,
 }
 
 impl Default for AppSettingsPatch {
     fn default() -> Self {
-        Self { font_zoom: None }
+        Self {
+            font_zoom: None,
+            density: None,
+        }
     }
 }
 
@@ -122,20 +130,26 @@ impl Default for AppSettingsPatch {
 #[serde(rename_all = "camelCase", default)]
 struct PortableFile {
     font_zoom: u32,
+    #[serde(default)]
+    density: String,
     theme: String,
     color_mode: String,
     toolbar_labels: bool,
     run_at_startup: bool,
+    #[serde(default)]
+    pantherbar: crate::pantherbar::PantherbarFile,
 }
 
 impl Default for PortableFile {
     fn default() -> Self {
         Self {
             font_zoom: DEFAULT_ZOOM,
+            density: DEFAULT_DENSITY.to_string(),
             theme: DEFAULT_THEME.to_string(),
             color_mode: DEFAULT_COLOR_MODE.to_string(),
             toolbar_labels: false,
             run_at_startup: false,
+            pantherbar: crate::pantherbar::PantherbarFile::default(),
         }
     }
 }
@@ -256,23 +270,38 @@ pub fn save_app_settings(
 }
 
 pub fn patch_app_settings(app: &AppHandle, patch: AppSettingsPatch) -> Result<(), String> {
-    if let Some(zoom) = patch.font_zoom {
-        with_settings_lock(|| {
-            let loaded = load_locked(app)?;
-            if !loaded.shared {
-                return write_local_value(app, "fontZoom", json!(clamp_zoom(zoom)));
-            }
-            let path = settings_path(&loaded.folder);
-            let mut file = read_portable_file(&path)?.normalize();
-            file.font_zoom = clamp_zoom(zoom);
-            write_portable_file(&path, &file)
-        })?;
+    if patch.font_zoom.is_none() && patch.density.is_none() {
+        return Ok(());
     }
-    Ok(())
+    with_settings_lock(|| {
+        let loaded = load_locked(app)?;
+        let zoom = patch.font_zoom.map(clamp_zoom);
+        let density = patch.density.as_deref().map(normalize_density);
+        if !loaded.shared {
+            if let Some(zoom) = zoom {
+                write_local_value(app, "fontZoom", json!(zoom))?;
+            }
+            if let Some(density) = density {
+                write_local_value(app, "density", json!(density))?;
+            }
+            return Ok(());
+        }
+        let path = settings_path(&loaded.folder);
+        let mut file = read_portable_file(&path)?.normalize();
+        if let Some(zoom) = zoom {
+            file.font_zoom = zoom;
+        }
+        if let Some(density) = &density {
+            file.density = density.clone();
+        }
+        write_portable_file(&path, &file)
+    })
 }
 
 fn with_settings_lock<T>(body: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
-    let _guard = SETTINGS_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _guard = SETTINGS_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     body()
 }
 
@@ -356,6 +385,7 @@ fn view_of(loaded: &Loaded) -> AppSettings {
         shared: loaded.shared,
         warning: loaded.warning.clone(),
         font_zoom: file.font_zoom,
+        density: file.density.clone(),
         theme: file.theme.clone(),
         color_mode: file.color_mode.clone(),
         toolbar_labels: file.toolbar_labels,
@@ -364,32 +394,49 @@ fn view_of(loaded: &Loaded) -> AppSettings {
 }
 
 fn read_local(app: &AppHandle) -> Result<PortableFile, String> {
-    let settings = app.store(POINTER_STORE).map_err(|error| error.to_string())?;
+    let settings = app
+        .store(POINTER_STORE)
+        .map_err(|error| error.to_string())?;
     let mut file = PortableFile {
         font_zoom: json_u32(settings.get("fontZoom")).unwrap_or(DEFAULT_ZOOM),
+        density: json_string(settings.get("density"))
+            .unwrap_or_else(|| DEFAULT_DENSITY.to_string()),
         theme: json_string(settings.get("theme")).unwrap_or_else(|| DEFAULT_THEME.to_string()),
-        color_mode: json_string(settings.get("colorMode")).unwrap_or_else(|| DEFAULT_COLOR_MODE.to_string()),
+        color_mode: json_string(settings.get("colorMode"))
+            .unwrap_or_else(|| DEFAULT_COLOR_MODE.to_string()),
         toolbar_labels: json_bool(settings.get("toolbarLabels")).unwrap_or(false),
         run_at_startup: json_bool(settings.get("runAtStartup")).unwrap_or(false),
+        pantherbar: settings
+            .get("pantherbar")
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default(),
     };
     file.normalize_in_place();
     Ok(file)
 }
 
 fn write_local(app: &AppHandle, file: &PortableFile) -> Result<(), String> {
-    let store = app.store(POINTER_STORE).map_err(|error| error.to_string())?;
+    let store = app
+        .store(POINTER_STORE)
+        .map_err(|error| error.to_string())?;
     store.delete("vaultPath");
+    store.delete("alwaysOnTopHotkey");
+    store.delete("hibernateHotkey");
     store.set("fontZoom", json!(file.font_zoom));
+    store.set("density", json!(file.density));
     store.set("theme", json!(file.theme));
     store.set("colorMode", json!(file.color_mode));
     store.set("toolbarLabels", json!(file.toolbar_labels));
     store.set("runAtStartup", json!(file.run_at_startup));
+    store.set("pantherbar", json!(file.pantherbar));
     store.set(POINTER_KEY, "");
     store.save().map_err(|error| error.to_string())
 }
 
 fn write_local_value(app: &AppHandle, key: &str, value: JsonValue) -> Result<(), String> {
-    let store = app.store(POINTER_STORE).map_err(|error| error.to_string())?;
+    let store = app
+        .store(POINTER_STORE)
+        .map_err(|error| error.to_string())?;
     store.set(key, value);
     store.save().map_err(|error| error.to_string())
 }
@@ -399,7 +446,9 @@ fn write_pointer(app: &AppHandle, folder: &str) -> Result<(), String> {
 }
 
 fn read_pointer(app: &AppHandle) -> Result<String, String> {
-    let store = app.store(POINTER_STORE).map_err(|error| error.to_string())?;
+    let store = app
+        .store(POINTER_STORE)
+        .map_err(|error| error.to_string())?;
     Ok(json_string(store.get(POINTER_KEY))
         .map(|value| normalize_folder(&value))
         .unwrap_or_default())
@@ -425,11 +474,17 @@ fn ensure_theme_css_file(folder: &str) -> Result<(), String> {
         return Ok(());
     }
     let path = theme_css_path(folder);
-    match fs::OpenOptions::new().write(true).create_new(true).open(&path) {
-        Ok(mut file) => file.write_all(THEME_CSS_TEMPLATE.as_bytes()).map_err(|error| {
-            let _ = fs::remove_file(&path);
-            format!("Couldn't create {}: {error}", path.display())
-        }),
+    match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+    {
+        Ok(mut file) => file
+            .write_all(THEME_CSS_TEMPLATE.as_bytes())
+            .map_err(|error| {
+                let _ = fs::remove_file(&path);
+                format!("Couldn't create {}: {error}", path.display())
+            }),
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
         Err(error) => Err(format!("Couldn't create {}: {error}", path.display())),
     }
@@ -444,29 +499,42 @@ fn read_theme_css_file(folder: &str) -> Result<String, String> {
     if !path.is_file() {
         return Ok(String::new());
     }
-    let metadata = fs::metadata(&path).map_err(|error| format!("Couldn't read {}: {error}", path.display()))?;
+    let metadata = fs::metadata(&path)
+        .map_err(|error| format!("Couldn't read {}: {error}", path.display()))?;
     if metadata.len() > MAX_THEME_CSS_BYTES {
-        return Err(format!("{} is larger than 256 KB, so it was not loaded.", path.display()));
+        return Err(format!(
+            "{} is larger than 256 KB, so it was not loaded.",
+            path.display()
+        ));
     }
-    let bytes = fs::read(&path).map_err(|error| format!("Couldn't read {}: {error}", path.display()))?;
+    let bytes =
+        fs::read(&path).map_err(|error| format!("Couldn't read {}: {error}", path.display()))?;
     if bytes.contains(&0) {
         return Err(format!("{} is not a text stylesheet.", path.display()));
     }
-    let text = String::from_utf8(bytes).map_err(|_| format!("{} is not valid UTF-8.", path.display()))?;
+    let text =
+        String::from_utf8(bytes).map_err(|_| format!("{} is not valid UTF-8.", path.display()))?;
     Ok(text.trim_start_matches('\u{feff}').to_string())
 }
 
 fn read_portable_file(path: &Path) -> Result<PortableFile, String> {
-    let bytes = fs::read(path).map_err(|error| format!("Couldn't read {}: {error}", path.display()))?;
-    serde_json::from_slice(&bytes)
-        .map_err(|error| format!("{} is not valid ce-desktop-tools settings: {error}", path.display()))
+    let bytes =
+        fs::read(path).map_err(|error| format!("Couldn't read {}: {error}", path.display()))?;
+    serde_json::from_slice(&bytes).map_err(|error| {
+        format!(
+            "{} is not valid ce-desktop-tools settings: {error}",
+            path.display()
+        )
+    })
 }
 
 fn write_portable_file(path: &Path, file: &PortableFile) -> Result<(), String> {
-    let mut payload = serde_json::to_vec_pretty(file).map_err(|error| format!("Couldn't save settings: {error}"))?;
+    let mut payload = serde_json::to_vec_pretty(file)
+        .map_err(|error| format!("Couldn't save settings: {error}"))?;
     payload.push(b'\n');
     let temporary = path.with_extension("json.tmp");
-    fs::write(&temporary, &payload).map_err(|error| format!("Couldn't save {}: {error}", path.display()))?;
+    fs::write(&temporary, &payload)
+        .map_err(|error| format!("Couldn't save {}: {error}", path.display()))?;
     if fs::rename(&temporary, path).is_ok() {
         return Ok(());
     }
@@ -508,9 +576,56 @@ impl PortableFile {
 
     fn normalize_in_place(&mut self) {
         self.font_zoom = clamp_zoom(self.font_zoom);
+        self.density = normalize_density(&self.density);
         self.theme = normalize_theme(&self.theme);
         self.color_mode = normalize_color_mode(&self.color_mode);
+        self.pantherbar.normalize();
     }
+}
+
+pub fn load_pantherbar(app: &AppHandle) -> Result<crate::pantherbar::PantherbarFile, String> {
+    with_settings_lock(|| {
+        let loaded = load_locked(app)?;
+        let mut file = loaded.file.pantherbar;
+        file.normalize();
+        Ok(file)
+    })
+}
+
+pub fn save_pantherbar(
+    app: &AppHandle,
+    next: crate::pantherbar::PantherbarFile,
+) -> Result<crate::pantherbar::PantherbarFile, String> {
+    with_settings_lock(|| {
+        let loaded = load_locked(app)?;
+        if loaded.warning.is_some()
+            && !loaded.folder.is_empty()
+            && settings_path(&loaded.folder).is_file()
+        {
+            return Err(loaded.warning.unwrap_or_else(|| {
+                "Couldn't read the settings file, so it was left unchanged.".into()
+            }));
+        }
+        let next = next.prepare()?;
+        if loaded.shared {
+            let path = settings_path(&loaded.folder);
+            let mut file = read_portable_file(&path)?.normalize();
+            file.pantherbar = next.clone();
+            write_portable_file(&path, &file)?;
+            return Ok(next);
+        }
+        if loaded.folder.is_empty() {
+            let mut file = loaded.file;
+            file.pantherbar = next.clone();
+            write_local(app, &file)?;
+            return Ok(next);
+        }
+        let mut file = loaded.file;
+        file.pantherbar = next.clone();
+        file.normalize_in_place();
+        write_portable_file(&settings_path(&loaded.folder), &file)?;
+        Ok(next)
+    })
 }
 
 fn normalize_theme(value: &str) -> String {
@@ -519,6 +634,15 @@ fn normalize_theme(value: &str) -> String {
         value.to_string()
     } else {
         DEFAULT_THEME.to_string()
+    }
+}
+
+fn normalize_density(value: &str) -> String {
+    let value = value.trim();
+    if DENSITIES.contains(&value) {
+        value.to_string()
+    } else {
+        DEFAULT_DENSITY.to_string()
     }
 }
 
@@ -572,8 +696,8 @@ fn folder_plan(previous: &str, next: &str, destination_exists: bool) -> FolderPl
 #[cfg(test)]
 mod tests {
     use super::{
-        DEFAULT_ZOOM, FolderPlan, PortableFile, clamp_zoom, folder_plan, normalize_folder, same_folder,
-        write_portable_file,
+        DEFAULT_ZOOM, FolderPlan, PortableFile, clamp_zoom, folder_plan, normalize_folder,
+        same_folder, write_portable_file,
     };
 
     #[test]
@@ -602,7 +726,10 @@ mod tests {
     fn preview_reads_an_existing_settings_file() {
         let directory = std::env::temp_dir().join(format!(
             "ce-desktop-tools-preview-{}",
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         std::fs::create_dir_all(&directory).unwrap();
         let path = directory.join("ce-desktop-tools.json");
@@ -633,31 +760,48 @@ mod tests {
     fn an_existing_file_in_a_new_folder_is_adopted() {
         assert_eq!(folder_plan("", "", false), FolderPlan::Local);
         assert_eq!(folder_plan(r"C:\Old", "", true), FolderPlan::Local);
-        assert_eq!(folder_plan(r"C:\Settings\", r"C:\Settings", true), FolderPlan::Write);
-        assert_eq!(folder_plan(r"C:\Old", r"D:\Shared", true), FolderPlan::Adopt);
-        assert_eq!(folder_plan(r"C:\Old", r"D:\Shared", false), FolderPlan::Write);
+        assert_eq!(
+            folder_plan(r"C:\Settings\", r"C:\Settings", true),
+            FolderPlan::Write
+        );
+        assert_eq!(
+            folder_plan(r"C:\Old", r"D:\Shared", true),
+            FolderPlan::Adopt
+        );
+        assert_eq!(
+            folder_plan(r"C:\Old", r"D:\Shared", false),
+            FolderPlan::Write
+        );
     }
 
     #[test]
     fn an_old_git_settings_file_loads_and_saves_the_current_shape() {
         let directory = std::env::temp_dir().join(format!(
             "ce-desktop-tools-settings-{}",
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         std::fs::create_dir_all(&directory).unwrap();
         let path = directory.join("ce-desktop-tools.json");
         std::fs::write(
             &path,
-            br#"{"rootPaths":["\\\\server\\share\\repos"],"vaultPath":"D:\\OldVault","fontZoom":130,"commitVerbosity":"descriptive","model":"gpt-test"}"#,
+            br#"{"rootPaths":["\\\\server\\share\\repos"],"vaultPath":"D:\\OldVault","fontZoom":130,"commitVerbosity":"descriptive","model":"gpt-test","alwaysOnTopHotkey":"Ctrl+Space","hibernateHotkey":"Shift+F1"}"#,
         )
         .unwrap();
 
         let loaded: PortableFile = super::read_portable_file(&path).unwrap().normalize();
         assert_eq!(loaded.font_zoom, 130);
+        assert_eq!(loaded.density, "default");
         assert_eq!(loaded.theme, "zinc");
         assert_eq!(loaded.color_mode, "dark");
         assert!(!loaded.toolbar_labels);
         assert!(!loaded.run_at_startup);
+        assert!(!loaded.pantherbar.enabled);
+        assert!(loaded.pantherbar.installed.is_none());
+        assert!(loaded.pantherbar.custom.is_empty());
+        assert!(loaded.pantherbar.excluded_apps.is_empty());
 
         let mut next = loaded;
         next.theme = "nord".into();
@@ -668,6 +812,7 @@ mod tests {
         write_portable_file(&path, &next).unwrap();
         let saved: PortableFile = super::read_portable_file(&path).unwrap().normalize();
         assert_eq!(saved.font_zoom, 130);
+        assert_eq!(saved.density, "default");
         assert_eq!(saved.theme, "nord");
         assert_eq!(saved.color_mode, "light");
         assert!(saved.toolbar_labels);
@@ -676,14 +821,23 @@ mod tests {
         assert!(!raw.contains("vaultPath"));
         assert!(!raw.contains("rootPaths"));
         assert!(!raw.contains("commitVerbosity"));
+        assert!(raw.contains("density"));
         assert!(raw.contains("runAtStartup"));
+        assert!(!raw.contains("alwaysOnTopHotkey"));
+        assert!(!raw.contains("hibernateHotkey"));
+
+        let mut kept = saved.clone();
+        kept.density = "compact".into();
+        assert_eq!(kept.normalize().density, "compact");
 
         let mut invalid = saved;
         invalid.theme = "nope".into();
         invalid.color_mode = "sepia".into();
+        invalid.density = "roomy".into();
         let normalized = invalid.normalize();
         assert_eq!(normalized.theme, "zinc");
         assert_eq!(normalized.color_mode, "dark");
+        assert_eq!(normalized.density, "default");
 
         let _ = std::fs::remove_dir_all(&directory);
     }
@@ -691,7 +845,16 @@ mod tests {
     #[test]
     fn known_themes_are_kept_and_unknown_themes_fall_back() {
         for theme in [
-            "zinc", "nord", "catppuccin", "solarized", "dracula", "gruvbox", "tokyo", "rosepine", "github", "onedark",
+            "zinc",
+            "nord",
+            "catppuccin",
+            "solarized",
+            "dracula",
+            "gruvbox",
+            "tokyo",
+            "rosepine",
+            "github",
+            "onedark",
         ] {
             let mut file = PortableFile::default();
             file.theme = theme.into();
@@ -703,14 +866,20 @@ mod tests {
     fn theme_css_reads_a_stylesheet_from_the_settings_folder() {
         let directory = std::env::temp_dir().join(format!(
             "ce-desktop-tools-theme-css-{}",
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         std::fs::create_dir_all(&directory).unwrap();
         let folder = directory.to_string_lossy().to_string();
 
         assert_eq!(super::read_theme_css_file("").unwrap(), "");
         let missing = directory.join("missing");
-        assert_eq!(super::read_theme_css_file(&missing.to_string_lossy()).unwrap(), "");
+        assert_eq!(
+            super::read_theme_css_file(&missing.to_string_lossy()).unwrap(),
+            ""
+        );
         assert!(!missing.join("ce-desktop-tools.css").exists());
 
         let created = super::read_theme_css_file(&folder).unwrap();
@@ -719,13 +888,24 @@ mod tests {
 
         let path = directory.join("ce-desktop-tools.css");
         std::fs::write(&path, "\u{feff}html { color: red; }").unwrap();
-        assert_eq!(super::read_theme_css_file(&folder).unwrap(), "html { color: red; }");
+        assert_eq!(
+            super::read_theme_css_file(&folder).unwrap(),
+            "html { color: red; }"
+        );
 
         std::fs::write(&path, b"html { color: red; }\0").unwrap();
-        assert!(super::read_theme_css_file(&folder).unwrap_err().contains("not a text stylesheet"));
+        assert!(
+            super::read_theme_css_file(&folder)
+                .unwrap_err()
+                .contains("not a text stylesheet")
+        );
 
         std::fs::write(&path, vec![b'a'; (256 * 1024) + 1]).unwrap();
-        assert!(super::read_theme_css_file(&folder).unwrap_err().contains("256 KB"));
+        assert!(
+            super::read_theme_css_file(&folder)
+                .unwrap_err()
+                .contains("256 KB")
+        );
 
         let _ = std::fs::remove_dir_all(&directory);
     }
