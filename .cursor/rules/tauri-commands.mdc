@@ -1,0 +1,20 @@
+---
+description: Rust Tauri command and serde conventions.
+globs: src-tauri/**/*.rs
+alwaysApply: false
+---
+
+# Tauri commands
+
+- Command names are `snake_case`. Register each one in `generate_handler!` in `src-tauri/src/lib.rs`.
+- Structs that cross the bridge use `#[serde(rename_all = "camelCase")]`.
+- Return `Result<T, String>`.
+- File and other blocking work uses `spawn_blocking`. Synchronous commands run on the webview thread.
+- The text-expansion hook runs on its own thread. Do not call `SendInput` from the hook callback, and do not write the key buffer to disk.
+
+```rust
+#[tauri::command]
+fn expansion_state(expansion: tauri::State<'_, Expansion>) -> ExpansionState {
+    expansion.state()
+}
+```

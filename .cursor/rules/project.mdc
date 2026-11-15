@@ -1,0 +1,20 @@
+---
+description: ce-desktop-tools product map, stack, and the frontend-to-Rust IPC boundary.
+alwaysApply: true
+---
+
+# Project
+
+Windows desktop tools shell. The first tool is text expansion. Snippets live in `expansion.json` in the settings folder, next to `ce-desktop-tools.json`, encrypted with a PIN. Expansion stays off until the vault is unlocked. A Windows keyboard hook expands a trigger in other apps. Typed keys stay in a short in-memory buffer and are never written down.
+
+- Frontend: `frontend/` — React 19, TypeScript, Tailwind 4, Vite 8. The `@` alias is `frontend/src`.
+- Backend: `src-tauri/` — Rust edition 2024, Tauri 2. Commands are registered in `src-tauri/src/lib.rs`.
+- Shared IPC types: `types/app.ts` and `types/expansion.ts`. Do not put bridge types under `frontend/src` or inside the Rust crate.
+- Frontend wrappers: `frontend/src/lib/app-client.ts` and `frontend/src/lib/expansion-client.ts`. Components call those functions, not `invoke` directly.
+
+```ts
+// frontend/src/lib/expansion-client.ts
+export function expansionState() {
+  return invoke<ExpansionState>("expansion_state");
+}
+```

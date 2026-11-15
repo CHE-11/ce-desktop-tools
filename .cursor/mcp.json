@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ce-desktop-tools": {
+      "command": "node",
+      "args": ["mcp/dev-server.mjs"]
+    }
+  }
+}

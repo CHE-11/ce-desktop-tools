@@ -1,0 +1,25 @@
+---
+description: React and TypeScript conventions for the ce-desktop-tools frontend.
+globs: frontend/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend
+
+- Components live in `frontend/src/components/[ComponentName].tsx`.
+- Pages live in `frontend/src/pages/[PageName].page.tsx` and set `document.title`.
+- Every HTML element gets an `id` as its first attribute.
+- Style with Tailwind. Merge classes with `cn()` from `frontend/src/lib/cn.ts`.
+- The home page is a tool rail. Text expansion is the first tool. Add the next tool as another rail entry and panel.
+
+```tsx
+export function HomePage() {
+  useEffect(() => {
+    document.title = "ce-desktop-tools";
+  }, []);
+
+  return <main id="home-page">...</main>;
+}
+```
+
+A new IPC call needs three pieces: a Rust command, a camelCase type in `types/`, and a wrapper in `frontend/src/lib/`.

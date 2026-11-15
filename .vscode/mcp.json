@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "ce-desktop-tools": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}/mcp/dev-server.mjs"]
+    }
+  }
+}
