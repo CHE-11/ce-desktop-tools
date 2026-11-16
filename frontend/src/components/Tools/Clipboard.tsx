@@ -5,7 +5,7 @@ import type { ClipboardState } from "../../../../types/clipboard";
 import { clipboardCopy, clipboardDelete, clipboardSetPinned, clipboardState } from "../../lib/clipboard-client";
 import { messageOf } from "../../lib/message";
 import { Button } from "../Button";
-import { VaultLock } from "./VaultLock";
+import { VaultLock } from "../VaultLock";
 
 type ClipboardProps = {
   settingsFolder: string;
@@ -16,9 +16,10 @@ type ClipboardProps = {
   onOpenSettings: () => void;
   onCreatePin: (pin: string) => Promise<void>;
   onUnlock: (pin: string) => Promise<void>;
+  onLock: () => void | Promise<void>;
 };
 
-export function Clipboard({ settingsFolder, locked, needsPin, busy, focusNonce, onOpenSettings, onCreatePin, onUnlock }: ClipboardProps) {
+export function Clipboard({ settingsFolder, locked, needsPin, busy, focusNonce, onOpenSettings, onCreatePin, onUnlock, onLock }: ClipboardProps) {
   const [history, setHistory] = useState<ClipboardState>({ locked: true, clips: [], error: null });
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -69,19 +70,17 @@ export function Clipboard({ settingsFolder, locked, needsPin, busy, focusNonce, 
             <span id="clipboard-folder-label">Choose settings folder</span>
           </Button>
         ) : null}
-
-        {locked || needsPin ? (
-          <VaultLock
-            needsPin={needsPin}
-            busy={busy}
-            focusNonce={focusNonce}
-            compact
-            pending={locked && !needsPin}
-            onCreate={onCreatePin}
-            onUnlock={onUnlock}
-          />
-        ) : null}
-
+        <VaultLock
+          locked={locked}
+          needsPin={needsPin}
+          busy={busy}
+          focusNonce={focusNonce}
+          compact
+          pending={locked && !needsPin}
+          onCreate={onCreatePin}
+          onUnlock={onUnlock}
+          onLock={onLock}
+        />
       </header>
       {history.error || error ? (
         <p id="clipboard-error" className="border-b border-red-900 bg-red-950/40 px-4 py-2 text-sm text-red-300">

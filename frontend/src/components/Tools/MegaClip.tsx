@@ -1,13 +1,13 @@
 import { listen } from "@tauri-apps/api/event";
-import { Copy } from "lucide-react";
+import { Copy, Pause, Play } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { MegaClipState } from "../../../../types/megaclip";
-import { megaclipClear, megaclipCopy, megaclipSetIndex, megaclipState } from "../../lib/megaclip-client";
+import { megaclipClear, megaclipCopy, megaclipSetIndex, megaclipState, setMegaclipEnabled } from "../../lib/megaclip-client";
 import { cn } from "../../lib/cn";
 import { messageOf } from "../../lib/message";
 import { Button } from "../Button";
 
-const EMPTY: MegaClipState = { clips: [], index: 0 };
+const EMPTY: MegaClipState = { clips: [], index: 0, enabled: true };
 
 export function MegaClip() {
   const [stack, setStack] = useState<MegaClipState>(EMPTY);
@@ -37,7 +37,7 @@ export function MegaClip() {
 
   return (
     <section id="megaclip-tool" className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header id="megaclip-header" className="flex items-start justify-between gap-3 border-b border-zinc-800 px-4 py-3">
+      <header id="megaclip-header" className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3">
         <div id="megaclip-heading" className="min-w-0">
           <h1 id="megaclip-title" className="text-base font-semibold text-zinc-100">
             MegaClip
@@ -46,15 +46,39 @@ export function MegaClip() {
             Next paste: {position}
           </p>
         </div>
-        <Button
-          id="megaclip-clear"
-          variant="outline"
-          disabled={stack.clips.length === 0}
-          onClick={() => void megaclipClear().then(setStack).catch((caught) => setError(messageOf(caught)))}
-        >
-          <span id="megaclip-clear-label">Clear</span>
-        </Button>
+        <div id="megaclip-actions" className="flex shrink-0 items-center gap-2">
+          <Button
+            id="megaclip-enabled"
+            variant={stack.enabled ? "secondary" : "outline"}
+            size="sm"
+            aria-pressed={stack.enabled}
+            title={stack.enabled ? "Disable MegaClip" : "Enable MegaClip"}
+            onClick={() =>
+              void setMegaclipEnabled(!stack.enabled).then(setStack).catch((caught) => setError(messageOf(caught)))
+            }
+          >
+            {stack.enabled ? (
+              <Pause id="megaclip-enabled-icon" className="size-3.5" aria-hidden="true" />
+            ) : (
+              <Play id="megaclip-enabled-icon" className="size-3.5" aria-hidden="true" />
+            )}
+            <span id="megaclip-enabled-label">{stack.enabled ? "Enabled" : "Disabled"}</span>
+          </Button>
+          <Button
+            id="megaclip-clear"
+            variant="outline"
+            disabled={stack.clips.length === 0}
+            onClick={() => void megaclipClear().then(setStack).catch((caught) => setError(messageOf(caught)))}
+          >
+            <span id="megaclip-clear-label">Clear</span>
+          </Button>
+        </div>
       </header>
+      {!stack.enabled ? (
+        <p id="megaclip-paused" className="border-b border-zinc-800 px-4 py-2 text-sm text-amber-300">
+          MegaClip is off. Hotkeys pass through until you enable it.
+        </p>
+      ) : null}
       <ul id="megaclip-hotkeys" className="grid gap-1 border-b border-zinc-800 px-4 py-3 text-xs text-zinc-400 sm:grid-cols-2">
         <li id="megaclip-hotkey-copy">Alt+Ctrl+C copies the selection onto the stack</li>
         <li id="megaclip-hotkey-paste">Alt+Ctrl+V pastes the current snippet and moves on</li>

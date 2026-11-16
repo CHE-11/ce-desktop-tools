@@ -3,7 +3,7 @@ import type { Snippet } from "../../../../types/expansion";
 import { childPath } from "../../lib/message";
 import { Button } from "../Button";
 import { SnippetTable } from "./SnippetTable";
-import { VaultLock } from "./VaultLock";
+import { VaultLock } from "../VaultLock";
 
 type TextExpansionProps = {
   settingsFolder: string;
@@ -18,6 +18,7 @@ type TextExpansionProps = {
   onSave: (snippets: Snippet[]) => Promise<void>;
   onCreatePin: (pin: string) => Promise<void>;
   onUnlock: (pin: string) => Promise<void>;
+  onLock: () => void | Promise<void>;
   onEditorChange: (open: boolean) => void;
 };
 
@@ -34,6 +35,7 @@ export function TextExpansion({
   onSave,
   onCreatePin,
   onUnlock,
+  onLock,
   onEditorChange,
 }: TextExpansionProps) {
   useEffect(() => {
@@ -58,16 +60,16 @@ export function TextExpansion({
             <span id="text-expansion-folder-label">Choose settings folder</span>
           </Button> 
         )}
-        {locked || needsPin ? (
-          <VaultLock
-            needsPin={needsPin}
-            busy={busy}
-            focusNonce={focusNonce}
-            compact
-            onCreate={onCreatePin}
-            onUnlock={onUnlock}
-          />
-        ) : null}
+        <VaultLock
+          locked={locked}
+          needsPin={needsPin}
+          busy={busy}
+          focusNonce={focusNonce}
+          compact
+          onCreate={onCreatePin}
+          onUnlock={onUnlock}
+          onLock={onLock}
+        />
       </div>
 
       {error ? (

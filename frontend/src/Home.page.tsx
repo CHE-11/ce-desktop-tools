@@ -258,6 +258,7 @@ export function HomePage() {
               onSave={saveSnippets}
               onCreatePin={(pin) => submitPin(pin, true)}
               onUnlock={(pin) => submitPin(pin, false)}
+              onLock={lock}
               onEditorChange={setSnippetOpen}
             />
           ) : null}
@@ -274,6 +275,7 @@ export function HomePage() {
               onOpenSettings={() => setSettingsOpen(true)}
               onCreatePin={(pin) => submitPin(pin, true)}
               onUnlock={(pin) => submitPin(pin, false)}
+              onLock={lock}
             />
           ) : null}
           {tool === "megaclip" ? <MegaClip /> : null}
@@ -284,9 +286,6 @@ export function HomePage() {
       </div>
       <StatusBar
         settingsFolder={expansion.settingsFolder}
-        snippetCount={expansion.snippets.length}
-        enabled={expansion.enabled}
-        locked={expansion.locked && expansion.settingsFolder.length > 0}
         updateVersion={updates.availableVersion}
         onUpdate={updates.showPending}
       />

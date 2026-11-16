@@ -16,9 +16,9 @@ import { publishDensity, readDensity } from "../../../lib/density";
 import { publishToolbarLabels, readToolbarLabels } from "../../../lib/toolbar-labels";
 import { publishZoom, readZoom } from "../../../lib/zoom";
 import { Button } from "../../Button";
-import { ChangePin } from "../../Tools/ChangePin";
 import { Dialog } from "../Dialog";
 import { AppSettingsTab } from "./AppSettingsTab";
+import { ChangePin } from "./ChangePin";
 
 type SettingsDialogProps = {
   open: boolean;

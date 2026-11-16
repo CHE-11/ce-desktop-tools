@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { changeVaultPin } from "../../lib/expansion-client";
-import { messageOf } from "../../lib/message";
-import { Button } from "../Button";
+import { changeVaultPin } from "../../../lib/expansion-client";
+import { messageOf } from "../../../lib/message";
+import { Button } from "../../Button";
+
 
 function pinError(pin: string) {
   const length = Array.from(pin).length;

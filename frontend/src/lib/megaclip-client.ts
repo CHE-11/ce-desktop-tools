@@ -5,6 +5,10 @@ export function megaclipState() {
   return invoke<MegaClipState>("megaclip_state");
 }
 
+export function setMegaclipEnabled(enabled: boolean) {
+  return invoke<MegaClipState>("megaclip_set_enabled", { enabled });
+}
+
 export function megaclipClear() {
   return invoke<MegaClipState>("megaclip_clear");
 }

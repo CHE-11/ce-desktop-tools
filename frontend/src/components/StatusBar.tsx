@@ -6,9 +6,6 @@ import { useFontZoom } from "../lib/zoom";
 
 type StatusBarProps = {
   settingsFolder: string;
-  snippetCount: number;
-  enabled: boolean;
-  locked: boolean;
   updateVersion: string | null;
   onUpdate: () => void;
 };
@@ -17,7 +14,7 @@ function Divider({ id }: { id: string }) {
   return <span id={id} className="h-3 w-px shrink-0 bg-zinc-700" aria-hidden="true" />;
 }
 
-export function StatusBar({ settingsFolder, snippetCount, enabled, locked, updateVersion, onUpdate }: StatusBarProps) {
+export function StatusBar({ settingsFolder, updateVersion, onUpdate }: StatusBarProps) {
   const zoom = useFontZoom();
   const [version, setVersion] = useState<string | null>(null);
 
@@ -28,7 +25,6 @@ export function StatusBar({ settingsFolder, snippetCount, enabled, locked, updat
   }, []);
 
   const folderLabel = settingsFolder ? baseName(settingsFolder) : "No settings folder";
-  const snippetLabel = snippetCount === 1 ? "1 snippet" : `${snippetCount} snippets`;
 
   return (
     <footer
@@ -59,14 +55,6 @@ export function StatusBar({ settingsFolder, snippetCount, enabled, locked, updat
         ) : null}
         <span id="status-folder" className="min-w-0 truncate text-zinc-300" title={settingsFolder || "No settings folder"}>
           {folderLabel}
-        </span>
-        <Divider id="status-sep-snippets" />
-        <span id="status-snippets" className="shrink-0 text-zinc-400">
-          {snippetLabel}
-        </span>
-        <Divider id="status-sep-expansion" />
-        <span id="status-expansion" className={locked ? "shrink-0 text-amber-300" : enabled ? "shrink-0 text-emerald-400" : "shrink-0 text-amber-300"}>
-          {locked ? "Vault locked" : enabled ? "Expansion on" : "Expansion paused"}
         </span>
       </div>
 

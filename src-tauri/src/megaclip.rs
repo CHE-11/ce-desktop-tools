@@ -6,14 +6,14 @@
 //! was before that press. A bare CapsLock tap still toggles the lock. The
 //! stack stays in memory.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 #[cfg(windows)]
 use std::collections::VecDeque;
 #[cfg(windows)]
-use std::sync::atomic::{AtomicBool, AtomicU32};
+use std::sync::atomic::AtomicU32;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
@@ -23,6 +23,7 @@ use tauri::{AppHandle, Emitter, Manager};
 pub struct MegaClipState {
     pub clips: Vec<String>,
     pub index: usize,
+    pub enabled: bool,
 }
 
 struct Inner {
@@ -74,6 +75,15 @@ impl MegaClip {
         crate::clipboard::set_clipboard_text(&text)
     }
 
+    pub fn set_enabled(&self, enabled: bool) -> MegaClipState {
+        ENABLED.store(enabled, Ordering::Relaxed);
+        if !enabled {
+            release_gesture();
+        }
+        self.inner.emit();
+        self.inner.view()
+    }
+
     pub fn set_index(&self, index: usize) -> Result<MegaClipState, String> {
         let len = self
             .inner
@@ -100,7 +110,11 @@ impl Inner {
             .map(|slot| slot.clone())
             .unwrap_or_default();
         let index = self.index.lock().map(|slot| *slot).unwrap_or(0);
-        MegaClipState { clips, index }
+        MegaClipState {
+            clips,
+            index,
+            enabled: ENABLED.load(Ordering::Relaxed),
+        }
     }
 
     fn emit(&self) {
@@ -209,6 +223,7 @@ impl Inner {
 
 const PASTE_HOLD: Duration = Duration::from_millis(16);
 const COPY_WAIT: Duration = Duration::from_millis(250);
+static ENABLED: AtomicBool = AtomicBool::new(true);
 static CLIP_EPOCH: AtomicU64 = AtomicU64::new(0);
 static PASTE_UNTIL: AtomicU64 = AtomicU64::new(0);
 static CLIP_GATE: Mutex<()> = Mutex::new(());
@@ -216,6 +231,16 @@ static CLOCK: OnceLock<Instant> = OnceLock::new();
 
 fn mono_millis() -> u64 {
     CLOCK.get_or_init(Instant::now).elapsed().as_millis() as u64
+}
+
+fn release_gesture() {
+    #[cfg(windows)]
+    {
+        CAPS_HELD.store(false, Ordering::Relaxed);
+        CAPS_USED.store(false, Ordering::Relaxed);
+        CAPS_NEXT.store(false, Ordering::Relaxed);
+        HELD_VK.store(u32::MAX, Ordering::Relaxed);
+    }
 }
 
 fn bump_clip_epoch() -> u64 {
@@ -500,7 +525,7 @@ fn hotkey_loop(inner: Arc<Inner>) {
         if code == HC_ACTION as i32 {
             let message = wparam.0 as u32;
             let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
-            if !injected_key(info) {
+            if !injected_key(info) && ENABLED.load(Ordering::Relaxed) {
                 let vk = info.vkCode as u16;
                 let down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
                 let up = message == WM_KEYUP || message == WM_SYSKEYUP;

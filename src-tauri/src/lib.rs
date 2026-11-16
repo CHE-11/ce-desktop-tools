@@ -191,6 +191,14 @@ fn megaclip_state(megaclip: tauri::State<'_, megaclip::MegaClip>) -> megaclip::M
 }
 
 #[tauri::command]
+fn megaclip_set_enabled(
+    megaclip: tauri::State<'_, megaclip::MegaClip>,
+    enabled: bool,
+) -> megaclip::MegaClipState {
+    megaclip.set_enabled(enabled)
+}
+
+#[tauri::command]
 fn megaclip_clear(megaclip: tauri::State<'_, megaclip::MegaClip>) -> megaclip::MegaClipState {
     megaclip.clear()
 }
@@ -442,6 +450,7 @@ pub fn run() {
             clipboard_delete,
             clipboard_copy,
             megaclip_state,
+            megaclip_set_enabled,
             megaclip_clear,
             megaclip_copy,
             megaclip_set_index,
