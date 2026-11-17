@@ -1,5 +1,5 @@
 import { Binary, CalendarClock, Cat, Clipboard, ClipboardList, FilePen, Keyboard, Lock, SpellCheck, Type, Unlock, type LucideIcon } from "lucide-react";
-import { useCallback, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { cn } from "../lib/cn";
 import { TOOLS, type ToolId } from "../lib/tools";
 import { RestartExplorer } from "./Actions/RestartExplorer.action";
@@ -25,8 +25,30 @@ const KEYBOARD_STEP = 16;
 type AppSidebarProps = {
   tool: ToolId;
   locked: boolean;
+  lockSeconds: number | null;
   onSelect: (id: ToolId) => void;
 };
+
+function useLockMinutes(locked: boolean, lockSeconds: number | null) {
+  const [minutes, setMinutes] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (locked || lockSeconds == null) {
+      setMinutes(null);
+      return;
+    }
+    const endsAt = Date.now() + lockSeconds * 1000;
+    const tick = () => {
+      const left = endsAt - Date.now();
+      setMinutes(left <= 0 ? 1 : Math.ceil(left / 60_000));
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [locked, lockSeconds]);
+
+  return minutes;
+}
 
 function clampWidth(value: number) {
   return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(value)));
@@ -53,7 +75,8 @@ function writeSidebarWidth(width: number) {
   }
 }
 
-export function AppSidebar({ tool, locked, onSelect }: AppSidebarProps) {
+export function AppSidebar({ tool, locked, lockSeconds, onSelect }: AppSidebarProps) {
+  const lockMinutes = useLockMinutes(locked, lockSeconds);
   const [width, setWidth] = useState(readSidebarWidth);
   const widthRef = useRef(width);
   const drag = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null);
@@ -157,11 +180,22 @@ export function AppSidebar({ tool, locked, onSelect }: AppSidebarProps) {
                       aria-label="Locked"
                     />
                   ) : (
-                    <Unlock
-                      id={`app-menu-${entry.id}-lock`}
-                      className="size-3.5 shrink-0 text-zinc-500"
-                      aria-label="Unlocked"
-                    />
+                    <>
+                      {lockMinutes != null ? (
+                        <span
+                          id={`app-menu-${entry.id}-lock-minutes`}
+                          className="shrink-0 text-xs tabular-nums text-zinc-400"
+                          title={`${lockMinutes} minutes until the vault locks`}
+                        >
+                          {lockMinutes} min
+                        </span>
+                      ) : null}
+                      <Unlock
+                        id={`app-menu-${entry.id}-lock`}
+                        className="size-3.5 shrink-0 text-zinc-500"
+                        aria-label="Unlocked"
+                      />
+                    </>
                   )
                 ) : null}
               </button>

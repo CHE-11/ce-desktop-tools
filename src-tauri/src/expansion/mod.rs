@@ -6,7 +6,10 @@ mod store;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
+
+/// An unlock lasts this long. Hiding the window to the tray does not lock the vault or pause this.
+const UNLOCK_LIMIT: Duration = Duration::from_secs(12 * 60 * 60);
 
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
@@ -26,6 +29,8 @@ pub struct ExpansionState {
     pub locked: bool,
     pub needs_pin: bool,
     pub error: Option<String>,
+    /// Seconds until the vault locks itself. Absent while the vault is locked.
+    pub lock_seconds: Option<u64>,
 }
 
 struct Inner {
@@ -42,6 +47,8 @@ struct Inner {
     seal: Mutex<Option<serde_json::Value>>,
     locked: AtomicBool,
     needs_pin: AtomicBool,
+    unlock_epoch: AtomicU64,
+    unlock_deadline: Mutex<Option<SystemTime>>,
     failures: AtomicU32,
     misspells: RwLock<Vec<crate::misspell::Entry>>,
     misspell_error: Mutex<Option<String>>,
@@ -85,6 +92,8 @@ impl Expansion {
                 seal: Mutex::new(None),
                 locked: AtomicBool::new(true),
                 needs_pin: AtomicBool::new(false),
+                unlock_epoch: AtomicU64::new(0),
+                unlock_deadline: Mutex::new(None),
                 failures: AtomicU32::new(0),
                 misspells: RwLock::new(Vec::new()),
                 misspell_error: Mutex::new(None),
@@ -257,6 +266,7 @@ impl Expansion {
     }
 
     pub fn state(&self) -> ExpansionState {
+        self.lock_if_expired();
         self.view()
     }
 
@@ -534,6 +544,7 @@ impl Expansion {
     }
 
     pub fn shutdown(&self) {
+        let _ = self.lock();
         hook::stop(&self.inner.hook);
     }
 
@@ -602,9 +613,15 @@ impl Expansion {
         if let Ok(mut slot) = self.inner.error.lock() {
             *slot = error.clone();
         }
+        let was_locked = self.inner.locked.load(Ordering::Relaxed);
         self.inner.locked.store(locked, Ordering::Relaxed);
         self.inner.needs_pin.store(needs_pin, Ordering::Relaxed);
         self.inner.hook.locked.store(locked, Ordering::Relaxed);
+        if locked {
+            self.inner.disarm_unlock_timer();
+        } else if was_locked {
+            self.arm_unlock_timer();
+        }
         self.inner.apply_hook(hook_snippets(&snippets, locked));
         if let Ok(mut slot) = self.inner.snippets.write() {
             *slot = snippets;
@@ -691,7 +708,48 @@ impl Expansion {
             locked: self.inner.locked.load(Ordering::Relaxed),
             needs_pin: self.inner.needs_pin.load(Ordering::Relaxed),
             error: self.inner.error.lock().ok().and_then(|slot| slot.clone()),
+            lock_seconds: self.inner.lock_seconds(),
         }
+    }
+
+    fn lock_if_expired(&self) {
+        if self.inner.lock_expired() {
+            let _ = self.lock();
+        }
+    }
+
+    fn arm_unlock_timer(&self) {
+        let epoch = self.inner.unlock_epoch.fetch_add(1, Ordering::AcqRel) + 1;
+        let deadline = SystemTime::now() + UNLOCK_LIMIT;
+        if let Ok(mut slot) = self.inner.unlock_deadline.lock() {
+            *slot = Some(deadline);
+        }
+        let expansion = self.clone();
+        std::thread::spawn(move || {
+            loop {
+                if expansion.inner.unlock_epoch.load(Ordering::Acquire) != epoch {
+                    return;
+                }
+                let Some(deadline) = expansion
+                    .inner
+                    .unlock_deadline
+                    .lock()
+                    .ok()
+                    .and_then(|slot| *slot)
+                else {
+                    return;
+                };
+                let now = SystemTime::now();
+                if now >= deadline {
+                    if expansion.inner.unlock_epoch.load(Ordering::Acquire) == epoch {
+                        let _ = expansion.lock();
+                    }
+                    return;
+                }
+                let remaining = deadline.duration_since(now).unwrap_or(Duration::ZERO);
+                std::thread::sleep(remaining.min(Duration::from_secs(30)));
+            }
+        });
     }
 
     fn vault(&self) -> String {
@@ -904,6 +962,9 @@ impl Inner {
         if let Ok(mut slot) = self.snippets.write() {
             *slot = snippets.clone();
         }
+        if locked {
+            self.disarm_unlock_timer();
+        }
         self.locked.store(locked, Ordering::Relaxed);
         self.needs_pin.store(needs_pin, Ordering::Relaxed);
         self.hook.locked.store(locked, Ordering::Relaxed);
@@ -1034,6 +1095,7 @@ impl Inner {
         if let Ok(mut slot) = self.seal.lock() {
             *slot = None;
         }
+        self.disarm_unlock_timer();
         self.locked.store(true, Ordering::Relaxed);
         self.hook.locked.store(true, Ordering::Relaxed);
         self.apply_hook(hook_snippets(&public, true));
@@ -1046,8 +1108,35 @@ impl Inner {
                 locked: true,
                 needs_pin: self.needs_pin.load(Ordering::Relaxed),
                 error: Some(error),
+                lock_seconds: None,
             },
         );
+    }
+
+    fn disarm_unlock_timer(&self) {
+        self.unlock_epoch.fetch_add(1, Ordering::AcqRel);
+        if let Ok(mut slot) = self.unlock_deadline.lock() {
+            *slot = None;
+        }
+    }
+
+    fn lock_expired(&self) -> bool {
+        if self.locked.load(Ordering::Relaxed) {
+            return false;
+        }
+        self.unlock_deadline
+            .lock()
+            .ok()
+            .and_then(|slot| *slot)
+            .is_some_and(|deadline| SystemTime::now() >= deadline)
+    }
+
+    fn lock_seconds(&self) -> Option<u64> {
+        remaining_lock_seconds(
+            self.locked.load(Ordering::Relaxed),
+            self.unlock_deadline.lock().ok().and_then(|slot| *slot),
+            SystemTime::now(),
+        )
     }
 
     fn snapshot(&self, snippets: Vec<Snippet>, error: Option<String>) -> ExpansionState {
@@ -1062,7 +1151,19 @@ impl Inner {
             locked: self.locked.load(Ordering::Relaxed),
             needs_pin: self.needs_pin.load(Ordering::Relaxed),
             error,
+            lock_seconds: self.lock_seconds(),
         }
+    }
+}
+
+fn remaining_lock_seconds(locked: bool, deadline: Option<SystemTime>, now: SystemTime) -> Option<u64> {
+    if locked {
+        return None;
+    }
+    let deadline = deadline?;
+    match deadline.duration_since(now) {
+        Ok(remaining) => Some(remaining.as_secs()),
+        Err(_) => Some(0),
     }
 }
 
@@ -1140,6 +1241,35 @@ fn public_snippets_on_disk(vault: &str) -> Vec<Snippet> {
 
 fn seal_value(raw: &str) -> Result<serde_json::Value, String> {
     serde_json::from_str(raw).map_err(|_| "Couldn't encrypt hidden snippets.".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unlock_lasts_twelve_hours() {
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+        let deadline = now + UNLOCK_LIMIT;
+        assert_eq!(
+            remaining_lock_seconds(false, Some(deadline), now),
+            Some(12 * 60 * 60)
+        );
+    }
+
+    #[test]
+    fn locked_vault_has_no_countdown() {
+        let now = SystemTime::UNIX_EPOCH;
+        assert_eq!(remaining_lock_seconds(true, Some(now), now), None);
+        assert_eq!(remaining_lock_seconds(false, None, now), None);
+    }
+
+    #[test]
+    fn expired_unlock_reports_zero() {
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(50);
+        let deadline = SystemTime::UNIX_EPOCH + Duration::from_secs(10);
+        assert_eq!(remaining_lock_seconds(false, Some(deadline), now), Some(0));
+    }
 }
 
 fn open_with_pin(

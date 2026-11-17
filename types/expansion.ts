@@ -13,4 +13,5 @@ export type ExpansionState = {
   locked: boolean;
   needsPin: boolean;
   error: string | null;
+  lockSeconds: number | null;
 };

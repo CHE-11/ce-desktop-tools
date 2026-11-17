@@ -47,6 +47,7 @@ const EMPTY_EXPANSION: ExpansionState = {
   locked: true,
   needsPin: false,
   error: null,
+  lockSeconds: null,
 };
 
 export function HomePage() {
@@ -134,6 +135,9 @@ export function HomePage() {
         if (!focused) {
           return;
         }
+        void expansionState()
+          .then((next) => setExpansion((current) => keepUnlockedSnippets(current, next)))
+          .catch((caught) => setError(messageOf(caught)));
         void themeCss()
           .then((css) => applyUserThemeCss(css))
           .catch((caught) => setError(messageOf(caught)));
@@ -242,7 +246,7 @@ export function HomePage() {
         </p>
       ) : null}
       <div id="app-body" className="flex min-h-0 flex-1">
-        <AppSidebar tool={tool} locked={expansion.locked} onSelect={setTool} />
+        <AppSidebar tool={tool} locked={expansion.locked} lockSeconds={expansion.lockSeconds} onSelect={setTool} />
         <main id="tool-panel" className="flex min-h-0 min-w-0 flex-1 flex-col">
           {tool === "expansion" ? (
             <TextExpansion

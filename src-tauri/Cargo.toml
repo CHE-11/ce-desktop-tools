@@ -1,6 +1,6 @@
 [package]
 name = "ce-desktop-tools"
-version = "1.0.3"
+version = "1.0.4"
 description = "Windows desktop tools"
 authors = ["you"]
 edition = "2024"
@@ -24,6 +24,7 @@ base64 = "0.22"
 tauri = { version = "2", features = ["image-ico", "image-png", "devtools", "tray-icon"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2"
+tauri-plugin-single-instance = "2"
 tauri-plugin-store = "2"
 tauri-plugin-updater = "2"
 

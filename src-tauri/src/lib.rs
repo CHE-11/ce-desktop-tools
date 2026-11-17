@@ -331,7 +331,16 @@ fn pantherbar_fit(pantherbar: tauri::State<'_, pantherbar::Pantherbar>, width: f
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     taskbar::set_process_app_id();
+    // Close hides the window and leaves this process in the tray. This has to
+    // be first so a later launch from the taskbar exits before it can add
+    // another tray icon.
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if args.iter().any(|arg| arg == "--background") {
+                return;
+            }
+            show_main(app);
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_process::init())
@@ -342,6 +351,7 @@ pub fn run() {
                     return;
                 }
                 api.prevent_close();
+                // The vault stays unlocked in the tray. It locks on quit, a manual lock, or after 12 hours.
                 let _ = window.hide();
             }
         })
