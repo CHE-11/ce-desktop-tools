@@ -2,7 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Lock, Pin, PinOff, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ClipboardState } from "../../../../types/clipboard";
-import { clipboardCopy, clipboardDelete, clipboardSetPinned, clipboardState } from "../../lib/clipboard-client";
+import { clipboardClear, clipboardClearWindows, clipboardCopy, clipboardDelete, clipboardSetPinned, clipboardState } from "../../lib/clipboard-client";
 import { messageOf } from "../../lib/message";
 import { Button } from "../Button";
 import { VaultLock } from "../VaultLock";
@@ -65,22 +65,44 @@ export function Clipboard({ settingsFolder, locked, needsPin, busy, focusNonce, 
             Recent text copies, saved in clipboard.json next to the settings file.
           </p>
         </div>
-        {settingsFolder.length === 0 ? (
-          <Button id="clipboard-folder" variant="outline" disabled={busy} onClick={onOpenSettings}>
-            <span id="clipboard-folder-label">Choose settings folder</span>
+        <div id="clipboard-actions" className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <Button
+            id="clipboard-clear-windows"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            title="Empty the Windows clipboard"
+            onClick={() => void clipboardClearWindows().catch((caught) => setError(messageOf(caught)))}
+          >
+            <span id="clipboard-clear-windows-label">Clear Windows Clipboard</span>
           </Button>
-        ) : null}
-        <VaultLock
-          locked={locked}
-          needsPin={needsPin}
-          busy={busy}
-          focusNonce={focusNonce}
-          compact
-          pending={locked && !needsPin}
-          onCreate={onCreatePin}
-          onUnlock={onUnlock}
-          onLock={onLock}
-        />
+          <Button
+            id="clipboard-clear-tools"
+            variant="outline"
+            size="sm"
+            disabled={busy || locked || needsPin || settingsFolder.length === 0 || history.clips.length === 0}
+            title="Delete every saved clip"
+            onClick={() => void clipboardClear().then(setHistory).catch((caught) => setError(messageOf(caught)))}
+          >
+            <span id="clipboard-clear-tools-label">Clear Tools Clipboard</span>
+          </Button>
+          {settingsFolder.length === 0 ? (
+            <Button id="clipboard-folder" variant="outline" disabled={busy} onClick={onOpenSettings}>
+              <span id="clipboard-folder-label">Choose settings folder</span>
+            </Button>
+          ) : null}
+          <VaultLock
+            locked={locked}
+            needsPin={needsPin}
+            busy={busy}
+            focusNonce={focusNonce}
+            compact
+            pending={locked && !needsPin}
+            onCreate={onCreatePin}
+            onUnlock={onUnlock}
+            onLock={onLock}
+          />
+        </div>
       </header>
       {history.error || error ? (
         <p id="clipboard-error" className="border-b border-red-900 bg-red-950/40 px-4 py-2 text-sm text-red-300">

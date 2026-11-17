@@ -186,6 +186,18 @@ fn clipboard_copy(
 }
 
 #[tauri::command]
+fn clipboard_clear(
+    clipboard: tauri::State<'_, clipboard::Clipboard>,
+) -> Result<clipboard::ClipboardState, String> {
+    clipboard.clear()
+}
+
+#[tauri::command]
+fn clipboard_clear_windows() -> Result<(), String> {
+    clipboard::clear_clipboard()
+}
+
+#[tauri::command]
 fn megaclip_state(megaclip: tauri::State<'_, megaclip::MegaClip>) -> megaclip::MegaClipState {
     megaclip.state()
 }
@@ -459,6 +471,8 @@ pub fn run() {
             clipboard_set_pinned,
             clipboard_delete,
             clipboard_copy,
+            clipboard_clear,
+            clipboard_clear_windows,
             megaclip_state,
             megaclip_set_enabled,
             megaclip_clear,

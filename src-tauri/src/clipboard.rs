@@ -110,6 +110,12 @@ impl Clipboard {
         })
     }
 
+    pub fn clear(&self) -> Result<ClipboardState, String> {
+        self.mutate(|clips| {
+            clips.clear();
+        })
+    }
+
     /// Rewrites clipboard.json with a new vault key. Returns the previous file bytes so the caller can restore them.
     pub fn reencrypt(
         &self,
@@ -509,6 +515,22 @@ pub(crate) fn set_clipboard_text(text: &str) -> Result<(), String> {
     clipboard_win::set_clipboard_string(text).map_err(|_| "Couldn't copy that clip.".into())
 }
 
+#[cfg(windows)]
+pub(crate) fn clear_clipboard() -> Result<(), String> {
+    use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard};
+    let _lock = CLIPBOARD_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    unsafe {
+        if OpenClipboard(None).is_err() {
+            return Err("Couldn't clear the Windows clipboard.".into());
+        }
+        let cleared = EmptyClipboard();
+        let _ = CloseClipboard();
+        cleared.map_err(|error| format!("Couldn't clear the Windows clipboard: {error}"))
+    }
+}
+
 #[cfg(not(windows))]
 pub(crate) fn read_clipboard_text() -> Option<String> {
     None
@@ -516,6 +538,11 @@ pub(crate) fn read_clipboard_text() -> Option<String> {
 
 #[cfg(not(windows))]
 pub(crate) fn set_clipboard_text(_text: &str) -> Result<(), String> {
+    Err("Clipboard history is only available on Windows.".into())
+}
+
+#[cfg(not(windows))]
+pub(crate) fn clear_clipboard() -> Result<(), String> {
     Err("Clipboard history is only available on Windows.".into())
 }
 

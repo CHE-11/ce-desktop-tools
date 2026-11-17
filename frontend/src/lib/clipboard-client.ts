@@ -16,3 +16,11 @@ export function clipboardDelete(id: string) {
 export function clipboardCopy(id: string) {
   return invoke<void>("clipboard_copy", { id });
 }
+
+export function clipboardClear() {
+  return invoke<ClipboardState>("clipboard_clear");
+}
+
+export function clipboardClearWindows() {
+  return invoke<void>("clipboard_clear_windows");
+}
