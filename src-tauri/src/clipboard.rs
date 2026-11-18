@@ -492,14 +492,23 @@ unsafe fn listen_loop(inner: Arc<Inner>) {
     let _ = inner;
 }
 
-#[cfg(windows)]
 static CLIPBOARD_LOCK: Mutex<()> = Mutex::new(());
+
+/// Hold this for as long as the Windows clipboard is open, everywhere in the app.
+///
+/// Windows lets a second thread of the same process open the clipboard while the
+/// first still has it. The second thread's close then closes it for both, and the
+/// first is left reading memory Windows has already freed. Do not take the gate
+/// again while holding it.
+pub(crate) fn clipboard_gate() -> std::sync::MutexGuard<'static, ()> {
+    CLIPBOARD_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+}
 
 #[cfg(windows)]
 pub(crate) fn read_clipboard_text() -> Option<String> {
-    let _lock = CLIPBOARD_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
+    let _gate = clipboard_gate();
     let text = clipboard_win::get_clipboard_string().ok()?;
     if text.is_empty() || text.encode_utf16().count() > MAX_TEXT {
         return None;
@@ -509,18 +518,14 @@ pub(crate) fn read_clipboard_text() -> Option<String> {
 
 #[cfg(windows)]
 pub(crate) fn set_clipboard_text(text: &str) -> Result<(), String> {
-    let _lock = CLIPBOARD_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
+    let _gate = clipboard_gate();
     clipboard_win::set_clipboard_string(text).map_err(|_| "Couldn't copy that clip.".into())
 }
 
 #[cfg(windows)]
 pub(crate) fn clear_clipboard() -> Result<(), String> {
     use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard};
-    let _lock = CLIPBOARD_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
+    let _gate = clipboard_gate();
     unsafe {
         if OpenClipboard(None).is_err() {
             return Err("Couldn't clear the Windows clipboard.".into());

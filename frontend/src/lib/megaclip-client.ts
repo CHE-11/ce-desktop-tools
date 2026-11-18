@@ -1,22 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { MegaClipState } from "../../../types/megaclip";
 
-export function megaclipState() {
-  return invoke<MegaClipState>("megaclip_state");
+export function megaclipRunning() {
+  return invoke<boolean>("megaclip_running");
 }
 
-export function setMegaclipEnabled(enabled: boolean) {
-  return invoke<MegaClipState>("megaclip_set_enabled", { enabled });
+export function runMegaClip() {
+  return invoke<void>("run_megaclip");
 }
 
-export function megaclipClear() {
-  return invoke<MegaClipState>("megaclip_clear");
-}
-
-export function megaclipCopy(index: number) {
-  return invoke<void>("megaclip_copy", { index });
-}
-
-export function megaclipSetIndex(index: number) {
-  return invoke<MegaClipState>("megaclip_set_index", { index });
+export function stopMegaClip() {
+  return invoke<void>("stop_megaclip");
 }

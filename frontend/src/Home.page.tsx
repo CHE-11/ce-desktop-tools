@@ -14,7 +14,6 @@ import { CommonMisspells } from "./components/Tools/CommonMisspells";
 import { DateExpander } from "./components/Tools/DateExpander";
 import { AsciiCodes } from "./components/Tools/AsciiCodes";
 import { Clipboard } from "./components/Tools/Clipboard";
-import { MegaClip } from "./components/Tools/MegaClip";
 import { KeyboardShortcuts } from "./components/Tools/KeyboardShortcuts";
 import { BatchRename } from "./components/Tools/BatchRename";
 import { Pantherbar } from "./components/Tools/Pantherbar";
@@ -282,7 +281,6 @@ export function HomePage() {
               onLock={lock}
             />
           ) : null}
-          {tool === "megaclip" ? <MegaClip /> : null}
           {tool === "app-shortcuts" ? <KeyboardShortcuts onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "rename" ? <BatchRename /> : null}
           {tool === "pantherbar" ? <Pantherbar /> : null}

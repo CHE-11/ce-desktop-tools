@@ -105,6 +105,7 @@ pub(crate) fn capture_clipboard() -> Result<ClipboardSnapshot, String> {
         use windows::Win32::System::DataExchange::{EnumClipboardFormats, GetClipboardData};
         use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
 
+        let _gate = crate::clipboard::clipboard_gate();
         unsafe {
             open_clipboard()?;
             let mut items = Vec::new();
@@ -154,6 +155,7 @@ fn restore_items(items: &[FormatData]) {
             GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock,
         };
 
+        let _gate = crate::clipboard::clipboard_gate();
         unsafe {
             if open_clipboard().is_err() {
                 return;

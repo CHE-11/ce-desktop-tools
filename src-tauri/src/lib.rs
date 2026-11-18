@@ -7,7 +7,7 @@ mod dev_feedback;
 mod excel;
 mod expansion;
 mod explorer_restart;
-mod megaclip;
+mod megaclip_script;
 mod misspell;
 mod pantherbar;
 mod paste_plain;
@@ -85,6 +85,21 @@ fn app_executable() -> Result<String, String> {
     std::env::current_exe()
         .map(|path| path.display().to_string())
         .map_err(|error| format!("Couldn't find this application: {error}"))
+}
+
+#[tauri::command]
+fn megaclip_running() -> bool {
+    megaclip_script::running()
+}
+
+#[tauri::command]
+fn run_megaclip() -> Result<(), String> {
+    megaclip_script::start()
+}
+
+#[tauri::command]
+fn stop_megaclip() -> Result<(), String> {
+    megaclip_script::stop()
 }
 
 #[tauri::command]
@@ -195,40 +210,6 @@ fn clipboard_clear(
 #[tauri::command]
 fn clipboard_clear_windows() -> Result<(), String> {
     clipboard::clear_clipboard()
-}
-
-#[tauri::command]
-fn megaclip_state(megaclip: tauri::State<'_, megaclip::MegaClip>) -> megaclip::MegaClipState {
-    megaclip.state()
-}
-
-#[tauri::command]
-fn megaclip_set_enabled(
-    megaclip: tauri::State<'_, megaclip::MegaClip>,
-    enabled: bool,
-) -> megaclip::MegaClipState {
-    megaclip.set_enabled(enabled)
-}
-
-#[tauri::command]
-fn megaclip_clear(megaclip: tauri::State<'_, megaclip::MegaClip>) -> megaclip::MegaClipState {
-    megaclip.clear()
-}
-
-#[tauri::command]
-fn megaclip_copy(
-    megaclip: tauri::State<'_, megaclip::MegaClip>,
-    index: usize,
-) -> Result<(), String> {
-    megaclip.copy_clip(index)
-}
-
-#[tauri::command]
-fn megaclip_set_index(
-    megaclip: tauri::State<'_, megaclip::MegaClip>,
-    index: usize,
-) -> Result<megaclip::MegaClipState, String> {
-    megaclip.set_index(index)
 }
 
 #[tauri::command]
@@ -371,8 +352,6 @@ pub fn run() {
             let expansion = Expansion::new(app.handle().clone());
             let clipboard = clipboard::Clipboard::start(app.handle().clone());
             app.manage(clipboard);
-            let megaclip = megaclip::MegaClip::start(app.handle().clone());
-            app.manage(megaclip);
             app.manage(app_shortcuts::AppShortcuts::start(app.handle()));
             let excel = excel::ExcelTools::start(app.handle().clone());
             app.manage(excel);
@@ -461,6 +440,9 @@ pub fn run() {
             app_release,
             app_executable,
             reveal_path,
+            megaclip_running,
+            run_megaclip,
+            stop_megaclip,
             expansion_state,
             save_expansions,
             create_vault_pin,
@@ -473,11 +455,6 @@ pub fn run() {
             clipboard_copy,
             clipboard_clear,
             clipboard_clear_windows,
-            megaclip_state,
-            megaclip_set_enabled,
-            megaclip_clear,
-            megaclip_copy,
-            megaclip_set_index,
             app_shortcuts_state,
             app_shortcuts_save,
             misspell_state,

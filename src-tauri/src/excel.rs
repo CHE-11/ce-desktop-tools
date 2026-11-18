@@ -85,6 +85,7 @@ fn clear_clipboard() -> Result<(), String> {
     #[cfg(windows)]
     {
         use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard};
+        let _gate = crate::clipboard::clipboard_gate();
         unsafe {
             if OpenClipboard(None).is_err() {
                 return Err("Couldn't clear the clipboard.".into());

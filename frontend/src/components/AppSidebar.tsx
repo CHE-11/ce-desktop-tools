@@ -1,13 +1,13 @@
-import { Binary, CalendarClock, Cat, Clipboard, ClipboardList, FilePen, Keyboard, Lock, SpellCheck, Type, Unlock, type LucideIcon } from "lucide-react";
+import { Binary, CalendarClock, Cat, Clipboard, FilePen, Keyboard, Lock, SpellCheck, Type, Unlock, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { cn } from "../lib/cn";
 import { TOOLS, type ToolId } from "../lib/tools";
 import { RestartExplorer } from "./Actions/RestartExplorer.action";
+import { RunMegaClip } from "./Actions/RunMegaClip.action";
 
 const TOOL_ICONS: Record<ToolId, LucideIcon> = {
   expansion: Type,
   clipboard: Clipboard,
-  megaclip: ClipboardList,
   misspell: SpellCheck,
   date: CalendarClock,
   ascii: Binary,
@@ -202,7 +202,9 @@ export function AppSidebar({ tool, locked, lockSeconds, onSelect }: AppSidebarPr
             );
           })}
         </nav>
+
         <div id="app-actions" aria-label="Actions" className="flex shrink-0 flex-col gap-2 border-t border-zinc-800 px-2 py-2">
+          <RunMegaClip />
           <RestartExplorer />
         </div>
       </aside>

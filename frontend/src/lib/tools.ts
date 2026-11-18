@@ -1,7 +1,6 @@
 export const TOOLS = [
   { id: "expansion", label: "Text Expansion", lockable: true },
   { id: "clipboard", label: "Clipboard", lockable: true },
-  { id: "megaclip", label: "MegaClip", lockable: false },
   { id: "misspell", label: "Common misspells", lockable: false },
   { id: "date", label: "Date expander", lockable: false },
   { id: "ascii", label: "ASCII codes", lockable: false },
