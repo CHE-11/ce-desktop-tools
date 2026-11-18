@@ -429,6 +429,14 @@ pub fn run() {
                     let _ = window.show();
                 }
             }
+            // The script looks for its own process, so this does not open a second copy.
+            let _ = std::thread::Builder::new()
+                .name("megaclip-script".into())
+                .spawn(|| {
+                    if let Err(error) = megaclip_script::start() {
+                        eprintln!("ce-desktop-tools could not start MegaClip: {error}");
+                    }
+                });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

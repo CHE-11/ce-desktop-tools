@@ -121,9 +121,6 @@ export function VaultLock({ locked, needsPin, busy, focusNonce, compact = false,
       ) : null}
       <div id="vault-lock-fields" className={compact ? "flex flex-wrap items-end gap-2" : "flex flex-col gap-3"}>
         <div id="vault-pin-field" className={compact ? "min-w-40 flex-1" : "flex flex-col gap-3"}>
-          <label id="vault-pin-label" htmlFor="vault-pin" className="text-xs font-medium text-zinc-400">
-            PIN
-          </label>
           <input
             id="vault-pin"
             value={pin}
@@ -132,7 +129,7 @@ export function VaultLock({ locked, needsPin, busy, focusNonce, compact = false,
             autoComplete="off"
             spellCheck={false}
             disabled={busy}
-            className="mt-1 h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm tracking-widest text-zinc-100 outline-none focus:border-sky-500 disabled:opacity-50"
+            className="h-7 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm tracking-widest text-zinc-100 outline-none focus:border-sky-500 disabled:opacity-50"
           />
         </div>
         {needsPin ? (
@@ -153,7 +150,7 @@ export function VaultLock({ locked, needsPin, busy, focusNonce, compact = false,
           </div>
         ) : null}
         {compact ? (
-          <Button id="vault-lock-submit" variant="primary" type="submit" disabled={busy}>
+          <Button id="vault-lock-submit" className="h-7" variant="primary" type="submit" disabled={busy}>
             <span id="vault-lock-submit-label">{busy ? "Checking…" : needsPin ? "Create PIN" : "Unlock"}</span>
           </Button>
         ) : null}
