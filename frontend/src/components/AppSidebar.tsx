@@ -1,4 +1,19 @@
-import { Binary, CalendarClock, Cat, Clipboard, FilePen, Keyboard, Lock, SpellCheck, Type, Unlock, type LucideIcon } from "lucide-react";
+import {
+  Activity,
+  Binary,
+  CalendarClock,
+  Cat,
+  Clipboard,
+  FilePen,
+  FolderSync,
+  Keyboard,
+  Lock,
+  Search,
+  SpellCheck,
+  Type,
+  Unlock,
+  type LucideIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { cn } from "../lib/cn";
 import { TOOLS, type ToolId } from "../lib/tools";
@@ -14,6 +29,9 @@ const TOOL_ICONS: Record<ToolId, LucideIcon> = {
   "app-shortcuts": Keyboard,
   rename: FilePen,
   pantherbar: Cat,
+  launcher: Search,
+  "folder-rules": FolderSync,
+  processes: Activity,
 };
 
 const SIDEBAR_WIDTH_KEY = "ce-desktop-tools.sidebar-width";

@@ -768,21 +768,21 @@ fn decode_base64(text: &str) -> Result<String, String> {
 }
 
 #[derive(Clone, Copy)]
-struct Chord {
-    ctrl: bool,
-    alt: bool,
-    shift: bool,
-    win: bool,
-    vk: u16,
+pub(crate) struct Chord {
+    pub(crate) ctrl: bool,
+    pub(crate) alt: bool,
+    pub(crate) shift: bool,
+    pub(crate) win: bool,
+    pub(crate) vk: u16,
 }
 
-fn canonical_hotkey(value: &str) -> String {
+pub(crate) fn canonical_hotkey(value: &str) -> String {
     parse_hotkey(value)
         .map(|chord| chord.label())
         .unwrap_or_default()
 }
 
-fn parse_hotkey(value: &str) -> Option<Chord> {
+pub(crate) fn parse_hotkey(value: &str) -> Option<Chord> {
     let mut ctrl = false;
     let mut alt = false;
     let mut shift = false;
@@ -876,7 +876,7 @@ fn vk_of(name: &str) -> Option<u16> {
 }
 
 impl Chord {
-    fn label(self) -> String {
+    pub(crate) fn label(self) -> String {
         let mut parts = Vec::new();
         if self.ctrl {
             parts.push("Ctrl".to_string());

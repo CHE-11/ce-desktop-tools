@@ -449,7 +449,10 @@ body {
 
 html[data-window="pantherbar"],
 html[data-window="pantherbar"] body,
-html[data-window="pantherbar"] #root {
+html[data-window="pantherbar"] #root,
+html[data-window="launcher"],
+html[data-window="launcher"] body,
+html[data-window="launcher"] #root {
   background: transparent;
 }
 

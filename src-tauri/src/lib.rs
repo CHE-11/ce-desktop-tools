@@ -7,10 +7,13 @@ mod dev_feedback;
 mod excel;
 mod expansion;
 mod explorer_restart;
+mod folder_rules;
+mod launcher;
 mod megaclip_script;
 mod misspell;
 mod pantherbar;
 mod paste_plain;
+mod processes;
 mod rename;
 mod startup;
 mod taskbar;
@@ -54,6 +57,12 @@ fn save_app_settings(
         expansion.load_from_settings();
     }
     app_shortcuts::AppShortcuts::reload(&app);
+    if let Some(launcher) = app.try_state::<launcher::Launcher>() {
+        launcher.reload();
+    }
+    if let Some(rules) = app.try_state::<folder_rules::FolderRules>() {
+        rules.reload();
+    }
     Ok(saved)
 }
 
@@ -321,6 +330,112 @@ fn pantherbar_fit(pantherbar: tauri::State<'_, pantherbar::Pantherbar>, width: f
     pantherbar.fit(width, height);
 }
 
+#[tauri::command]
+fn launcher_state(launcher: tauri::State<'_, launcher::Launcher>) -> launcher::LauncherState {
+    launcher.state()
+}
+
+#[tauri::command]
+fn launcher_save(
+    launcher: tauri::State<'_, launcher::Launcher>,
+    settings: launcher::LauncherSave,
+) -> Result<launcher::LauncherState, String> {
+    launcher.save(settings)
+}
+
+#[tauri::command]
+async fn launcher_query(app: tauri::AppHandle, text: String) -> Result<Vec<launcher::LauncherResult>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.try_state::<launcher::Launcher>()
+            .map(|launcher| launcher.query(&text))
+            .unwrap_or_default()
+    })
+    .await
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn launcher_run(app: tauri::AppHandle, id: String) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || launcher::run(&app, &id))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+fn launcher_hide(launcher: tauri::State<'_, launcher::Launcher>) {
+    launcher.hide();
+}
+
+#[tauri::command]
+fn launcher_refresh_apps() {
+    std::thread::spawn(launcher::apps::refresh);
+}
+
+#[tauri::command]
+fn folder_rules_state(rules: tauri::State<'_, folder_rules::FolderRules>) -> folder_rules::FolderRulesState {
+    rules.state()
+}
+
+#[tauri::command]
+async fn folder_rules_save(
+    rules: tauri::State<'_, folder_rules::FolderRules>,
+    enabled: bool,
+    folders: Vec<folder_rules::WatchedFolder>,
+) -> Result<folder_rules::FolderRulesState, String> {
+    let rules = rules.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || rules.save(enabled, folders))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn folder_rules_run(
+    rules: tauri::State<'_, folder_rules::FolderRules>,
+    folder_id: Option<String>,
+    dry_run: bool,
+) -> Result<Vec<folder_rules::ActivityEntry>, String> {
+    let rules = rules.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || rules.run(folder_id, dry_run))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+fn folder_rules_activity(
+    rules: tauri::State<'_, folder_rules::FolderRules>,
+) -> Vec<folder_rules::ActivityEntry> {
+    rules.activity()
+}
+
+#[tauri::command]
+async fn process_list() -> Result<Vec<processes::ProcessInfo>, String> {
+    tauri::async_runtime::spawn_blocking(processes::list)
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn process_kill(pid: u32, tree: bool) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || processes::kill(pid, tree))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn port_owners(port: String) -> Result<Vec<processes::PortOwner>, String> {
+    let pattern = processes::PortPattern::parse(&port)?;
+    tauri::async_runtime::spawn_blocking(move || processes::port_owners(&pattern))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn file_lockers(path: String) -> Result<Vec<processes::FileLocker>, String> {
+    tauri::async_runtime::spawn_blocking(move || processes::file_lockers(&path))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     taskbar::set_process_app_id();
@@ -419,6 +534,8 @@ pub fn run() {
             let pantherbar = pantherbar::Pantherbar::start(app.handle().clone())
                 .map_err(std::io::Error::other)?;
             app.manage(pantherbar);
+            app.manage(launcher::Launcher::start(app.handle().clone()));
+            app.manage(folder_rules::FolderRules::start(app.handle().clone()));
             if let Ok(settings) = app_settings::app_settings(app.handle()) {
                 if let Err(error) = startup::sync_run_at_startup(settings.run_at_startup) {
                     eprintln!("ce-desktop-tools startup setting was not applied: {error}");
@@ -480,6 +597,20 @@ pub fn run() {
             pantherbar_save,
             pantherbar_run,
             pantherbar_fit,
+            launcher_state,
+            launcher_save,
+            launcher_query,
+            launcher_run,
+            launcher_hide,
+            launcher_refresh_apps,
+            folder_rules_state,
+            folder_rules_save,
+            folder_rules_run,
+            folder_rules_activity,
+            process_list,
+            process_kill,
+            port_owners,
+            file_lockers,
             dev_feedback_probe,
             dev_feedback_push
         ])
@@ -496,7 +627,7 @@ pub fn run() {
         });
 }
 
-fn show_main(app: &tauri::AppHandle) {
+pub(crate) fn show_main(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();

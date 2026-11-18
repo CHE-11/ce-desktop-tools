@@ -138,6 +138,8 @@ struct PortableFile {
     run_at_startup: bool,
     #[serde(default)]
     pantherbar: crate::pantherbar::PantherbarFile,
+    #[serde(default)]
+    launcher: crate::launcher::LauncherFile,
 }
 
 impl Default for PortableFile {
@@ -150,6 +152,7 @@ impl Default for PortableFile {
             toolbar_labels: false,
             run_at_startup: false,
             pantherbar: crate::pantherbar::PantherbarFile::default(),
+            launcher: crate::launcher::LauncherFile::default(),
         }
     }
 }
@@ -410,6 +413,10 @@ fn read_local(app: &AppHandle) -> Result<PortableFile, String> {
             .get("pantherbar")
             .and_then(|value| serde_json::from_value(value).ok())
             .unwrap_or_default(),
+        launcher: settings
+            .get("launcher")
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default(),
     };
     file.normalize_in_place();
     Ok(file)
@@ -429,6 +436,7 @@ fn write_local(app: &AppHandle, file: &PortableFile) -> Result<(), String> {
     store.set("toolbarLabels", json!(file.toolbar_labels));
     store.set("runAtStartup", json!(file.run_at_startup));
     store.set("pantherbar", json!(file.pantherbar));
+    store.set("launcher", json!(file.launcher));
     store.set(POINTER_KEY, "");
     store.save().map_err(|error| error.to_string())
 }
@@ -580,7 +588,57 @@ impl PortableFile {
         self.theme = normalize_theme(&self.theme);
         self.color_mode = normalize_color_mode(&self.color_mode);
         self.pantherbar.normalize();
+        self.launcher.normalize();
     }
+}
+
+pub fn load_launcher(app: &AppHandle) -> Result<crate::launcher::LauncherFile, String> {
+    with_settings_lock(|| {
+        let loaded = load_locked(app)?;
+        let mut file = loaded.file.launcher;
+        file.normalize();
+        Ok(file)
+    })
+}
+
+pub fn save_launcher(
+    app: &AppHandle,
+    mut next: crate::launcher::LauncherFile,
+) -> Result<crate::launcher::LauncherFile, String> {
+    next.normalize();
+    let saved = next.clone();
+    save_section(app, move |file| file.launcher = next)?;
+    Ok(saved)
+}
+
+/// Writes one section of the settings to wherever settings live now, and
+/// keeps every other value already in the file.
+fn save_section(app: &AppHandle, apply: impl FnOnce(&mut PortableFile)) -> Result<(), String> {
+    with_settings_lock(|| {
+        let loaded = load_locked(app)?;
+        if loaded.warning.is_some()
+            && !loaded.folder.is_empty()
+            && settings_path(&loaded.folder).is_file()
+        {
+            return Err(loaded.warning.unwrap_or_else(|| {
+                "Couldn't read the settings file, so it was left unchanged.".into()
+            }));
+        }
+        if loaded.shared {
+            let path = settings_path(&loaded.folder);
+            let mut file = read_portable_file(&path)?.normalize();
+            apply(&mut file);
+            file.normalize_in_place();
+            return write_portable_file(&path, &file);
+        }
+        let mut file = loaded.file;
+        apply(&mut file);
+        file.normalize_in_place();
+        if loaded.folder.is_empty() {
+            return write_local(app, &file);
+        }
+        write_portable_file(&settings_path(&loaded.folder), &file)
+    })
 }
 
 pub fn load_pantherbar(app: &AppHandle) -> Result<crate::pantherbar::PantherbarFile, String> {
@@ -802,6 +860,8 @@ mod tests {
         assert!(loaded.pantherbar.installed.is_none());
         assert!(loaded.pantherbar.custom.is_empty());
         assert!(loaded.pantherbar.excluded_apps.is_empty());
+        assert!(loaded.launcher.enabled);
+        assert_eq!(loaded.launcher.hotkey, "Win+Space");
 
         let mut next = loaded;
         next.theme = "nord".into();
@@ -823,6 +883,8 @@ mod tests {
         assert!(!raw.contains("commitVerbosity"));
         assert!(raw.contains("density"));
         assert!(raw.contains("runAtStartup"));
+        assert!(raw.contains("\"launcher\""));
+        assert_eq!(saved.launcher.hotkey, "Win+Space");
         assert!(!raw.contains("alwaysOnTopHotkey"));
         assert!(!raw.contains("hibernateHotkey"));
 

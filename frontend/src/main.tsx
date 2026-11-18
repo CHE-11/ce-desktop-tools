@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { applyAppearance, readAppearance } from "./lib/appearance";
 import { installDevConsole } from "./lib/dev-feedback";
 import { applyZoom, readZoom } from "./lib/zoom";
+import { LauncherWindow } from "./components/Launcher/LauncherWindow";
 import { PantherbarBar } from "./components/Tools/PantherbarBar";
 import { HomePage } from "./Home.page";
 import "./index.css";
@@ -19,8 +20,11 @@ applyZoom(readZoom());
 installNoInputSuggestions();
 
 const pantherbarWindow = window.__PANTHERBAR__ === true;
+const launcherWindow = window.__LAUNCHER__ === true;
 if (pantherbarWindow) {
   document.documentElement.dataset.window = "pantherbar";
+} else if (launcherWindow) {
+  document.documentElement.dataset.window = "launcher";
 }
 
 const root = document.getElementById("root");
@@ -28,9 +32,19 @@ if (!root) {
   throw new Error("Root element is missing");
 }
 
+function WindowContent() {
+  if (pantherbarWindow) {
+    return <PantherbarBar />;
+  }
+  if (launcherWindow) {
+    return <LauncherWindow />;
+  }
+  return <HomePage />;
+}
+
 createRoot(root).render(
   <StrictMode>
-    {pantherbarWindow ? <PantherbarBar /> : <HomePage />}
+    <WindowContent />
   </StrictMode>,
 );
 

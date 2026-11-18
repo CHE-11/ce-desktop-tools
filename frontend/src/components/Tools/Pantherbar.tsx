@@ -2,6 +2,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { GripVertical, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { PantherbarSave, PantherbarState } from "../../../../types/pantherbar";
+import { hotkeyName } from "../../lib/hotkey";
 import { pantherbarSave, pantherbarState } from "../../lib/pantherbar-client";
 import { messageOf } from "../../lib/message";
 import { Button } from "../Button";
@@ -35,50 +36,6 @@ function saveOf(state: PantherbarState, patch: Partial<PantherbarSave> = {}): Pa
     excludedApps: patch.excludedApps ?? state.excludedApps,
     hotkey: patch.hotkey ?? state.hotkey,
   };
-}
-
-function hotkeyName(code: string) {
-  if (code.startsWith("Key") && code.length === 4) {
-    return code.slice(3);
-  }
-  if (code.startsWith("Digit") && code.length === 6) {
-    return code.slice(5);
-  }
-  if (/^Numpad\d$/.test(code)) {
-    return code;
-  }
-  if (/^F\d{1,2}$/.test(code)) {
-    return code;
-  }
-  const named: Record<string, string> = {
-    Space: "Space",
-    Enter: "Enter",
-    Tab: "Tab",
-    Escape: "Esc",
-    Backspace: "Backspace",
-    Delete: "Delete",
-    Insert: "Insert",
-    Home: "Home",
-    End: "End",
-    PageUp: "PageUp",
-    PageDown: "PageDown",
-    ArrowLeft: "Left",
-    ArrowRight: "Right",
-    ArrowUp: "Up",
-    ArrowDown: "Down",
-    Semicolon: ";",
-    Quote: "'",
-    Comma: ",",
-    Period: ".",
-    Slash: "/",
-    Backslash: "\\",
-    BracketLeft: "[",
-    BracketRight: "]",
-    Minus: "-",
-    Equal: "=",
-    Backquote: "`",
-  };
-  return named[code] ?? "";
 }
 
 function domId(value: string) {

@@ -7,6 +7,13 @@ export const TOOLS = [
   { id: "app-shortcuts", label: "Keyboard Shortcuts", lockable: false },
   { id: "rename", label: "Batch rename", lockable: false },
   { id: "pantherbar", label: "Pantherbar", lockable: false },
+  { id: "launcher", label: "Launcher", lockable: false },
+  { id: "folder-rules", label: "Folder Rules", lockable: false },
+  { id: "processes", label: "Processes", lockable: false },
 ] as const;
 
 export type ToolId = (typeof TOOLS)[number]["id"];
+
+export function isToolId(value: string): value is ToolId {
+  return TOOLS.some((tool) => tool.id === value);
+}

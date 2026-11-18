@@ -17,13 +17,16 @@ import { Clipboard } from "./components/Tools/Clipboard";
 import { KeyboardShortcuts } from "./components/Tools/KeyboardShortcuts";
 import { BatchRename } from "./components/Tools/BatchRename";
 import { Pantherbar } from "./components/Tools/Pantherbar";
+import { Launcher } from "./components/Tools/Launcher";
+import { FolderRules } from "./components/Tools/FolderRules";
+import { Processes } from "./components/Tools/Processes";
 import { applyUserThemeCss, normalizeColorMode, normalizeTheme, publishAppearance } from "./lib/appearance";
 import { publishDensity } from "./lib/density";
 import { appSettings, themeCss } from "./lib/app-client";
 import { useDevFeedback } from "./lib/dev-feedback";
 import { expansionState, lockVault, saveExpansions, setExpansionEnabled, unlockVault, createVaultPin } from "./lib/expansion-client";
 import { messageOf } from "./lib/message";
-import type { ToolId } from "./lib/tools";
+import { isToolId, TOOLS, type ToolId } from "./lib/tools";
 import { publishToolbarLabels, readToolbarLabels } from "./lib/toolbar-labels";
 import { useAppUpdate } from "./lib/use-app-update";
 import { publishZoom } from "./lib/zoom";
@@ -116,6 +119,11 @@ export function HomePage() {
       }),
       listen("pantherbar-open", () => {
         setTool("pantherbar");
+      }),
+      listen<string>("launcher-open-tool", (event) => {
+        if (isToolId(event.payload)) {
+          setTool(event.payload);
+        }
       }),
     ];
     return () => {
@@ -211,6 +219,14 @@ export function HomePage() {
       group: "Settings",
       run: () => void updates.checkForUpdate(),
     },
+    ...TOOLS.map(
+      (entry): CommandItem => ({
+        id: `open-${entry.id}`,
+        label: `Open ${entry.label}`,
+        group: "Tools",
+        run: () => setTool(entry.id),
+      }),
+    ),
   ];
 
   useDevFeedback({
@@ -284,6 +300,9 @@ export function HomePage() {
           {tool === "app-shortcuts" ? <KeyboardShortcuts onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "rename" ? <BatchRename /> : null}
           {tool === "pantherbar" ? <Pantherbar /> : null}
+          {tool === "launcher" ? <Launcher /> : null}
+          {tool === "folder-rules" ? <FolderRules onOpenSettings={() => setSettingsOpen(true)} /> : null}
+          {tool === "processes" ? <Processes /> : null}
         </main>
       </div>
       <StatusBar
