@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { Snippet } from "../../../../types/expansion";
 import { childPath } from "../../lib/message";
 import { Button } from "../Button";
+import { ExpansionOptionsDialog } from "../Dialogs/ExpansionOptionsDialog";
 import { SnippetTable } from "./SnippetTable";
 import { VaultLock } from "../VaultLock";
 
@@ -38,6 +39,8 @@ export function TextExpansion({
   onLock,
   onEditorChange,
 }: TextExpansionProps) {
+  const [optionsOpen, setOptionsOpen] = useState(false);
+
   useEffect(() => {
     if (settingsFolder.length === 0) {
       onEditorChange(false);
@@ -55,22 +58,28 @@ export function TextExpansion({
             {settingsFolder ? childPath(settingsFolder, "expansion.json") : "Saved in the settings folder, next to ce-desktop-tools.json"}
           </p>
         </div>
-        {!settingsFolder && (
-          <Button id="text-expansion-folder" variant="outline" disabled={busy} onClick={onOpenSettings}>
-            <span id="text-expansion-folder-label">Choose settings folder</span>
-          </Button> 
-        )}
-        <VaultLock
-          locked={locked}
-          needsPin={needsPin}
-          busy={busy}
-          focusNonce={focusNonce}
-          compact
-          onCreate={onCreatePin}
-          onUnlock={onUnlock}
-          onLock={onLock}
-        />
+        <div id="text-expansion-actions" className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {!settingsFolder && (
+            <Button id="text-expansion-folder" variant="outline" disabled={busy} onClick={onOpenSettings}>
+              <span id="text-expansion-folder-label">Choose settings folder</span>
+            </Button>
+          )}
+          <Button id="text-expansion-options" variant="outline" size="sm" onClick={() => setOptionsOpen(true)}>
+            <span id="text-expansion-options-label">Options</span>
+          </Button>
+          <VaultLock
+            locked={locked}
+            needsPin={needsPin}
+            busy={busy}
+            focusNonce={focusNonce}
+            compact
+            onCreate={onCreatePin}
+            onUnlock={onUnlock}
+            onLock={onLock}
+          />
+        </div>
       </div>
+      <ExpansionOptionsDialog open={optionsOpen} onClose={() => setOptionsOpen(false)} />
 
       {error ? (
         <p id="text-expansion-error" className="border-b border-red-900 bg-red-950/40 px-4 py-2 text-sm text-red-300">

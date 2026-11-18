@@ -16,6 +16,8 @@ use crate::expansion::matcher::{ExpansionHit, Matcher, Snippet};
 pub struct Pending {
     pub backspaces: usize,
     pub text: String,
+    pub ending: Option<char>,
+    pub timed: bool,
 }
 
 pub struct HookState {
@@ -150,7 +152,15 @@ fn perform_pending(state: &HookState) {
     let Some(pending) = pending else {
         return;
     };
-    inject(pending.backspaces, &pending.text);
+    let mut text = if pending.timed {
+        crate::date_expand::render_now(&pending.text)
+    } else {
+        crate::date_expand::expand_variables(&pending.text)
+    };
+    if let Some(ch) = pending.ending {
+        text.push(ch);
+    }
+    inject(pending.backspaces, &text);
 }
 
 #[cfg(windows)]
@@ -275,16 +285,13 @@ fn schedule(state: &HookState, hit: &ExpansionHit) {
         Some(_) => hit.trigger.chars().count(),
         None => hit.trigger.chars().count().saturating_sub(1),
     };
-    let mut text = if hit.timed {
-        crate::date_expand::render_now(&hit.text)
-    } else {
-        hit.text.clone()
-    };
-    if let Some(ch) = hit.ending {
-        text.push(ch);
-    }
     if let Ok(mut pending) = state.pending.lock() {
-        *pending = Some(Pending { backspaces, text });
+        *pending = Some(Pending {
+            backspaces,
+            text: hit.text.clone(),
+            ending: hit.ending,
+            timed: hit.timed,
+        });
     }
     unsafe {
         let _ = PostThreadMessageW(GetCurrentThreadId(), WM_APP + 1, WPARAM(0), LPARAM(0));
@@ -491,7 +498,7 @@ const INJECT_MARK: usize = 0xCE70_0E01;
 fn inject(backspaces: usize, text: &str) {
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, SendInput,
-        VIRTUAL_KEY, VK_BACK, VK_RETURN, VK_SPACE, VK_TAB,
+        VIRTUAL_KEY, VK_BACK, VK_LEFT, VK_RETURN, VK_SPACE, VK_TAB,
     };
 
     let mut inputs = Vec::new();
@@ -499,8 +506,15 @@ fn inject(backspaces: usize, text: &str) {
         push_vk(&mut inputs, VK_BACK, false);
         push_vk(&mut inputs, VK_BACK, true);
     }
+    let mut after_cursor: Option<usize> = None;
     let mut chars = text.chars().peekable();
     while let Some(ch) = chars.next() {
+        if ch == crate::date_expand::CURSOR {
+            if after_cursor.is_none() {
+                after_cursor = Some(0);
+            }
+            continue;
+        }
         if ch == '\r' {
             if chars.peek() == Some(&'\n') {
                 chars.next();
@@ -523,6 +537,18 @@ fn inject(backspaces: usize, text: &str) {
                 push_unicode(&mut inputs, unit, false);
                 push_unicode(&mut inputs, unit, true);
             }
+            if let Some(left) = after_cursor.as_mut() {
+                *left += count.saturating_sub(1);
+            }
+        }
+        if let Some(left) = after_cursor.as_mut() {
+            *left += 1;
+        }
+    }
+    if let Some(left) = after_cursor {
+        for _ in 0..left {
+            push_vk(&mut inputs, VK_LEFT, false);
+            push_vk(&mut inputs, VK_LEFT, true);
         }
     }
     if inputs.is_empty() {

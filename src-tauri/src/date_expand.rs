@@ -180,6 +180,166 @@ pub fn render_now(template: &str) -> String {
     render_at(template, &local_parts())
 }
 
+/// Private-use mark left where `{cursor}` was. The injector moves the caret here and does not type it.
+pub const CURSOR: char = '\u{E000}';
+
+struct VariableContext {
+    clipboard: String,
+    user: String,
+    computer: String,
+}
+
+/// Replaces tokens in snippet text. Anything that is not a known token stays as written.
+pub fn expand_variables(text: &str) -> String {
+    expand_in(text, &local_parts(), &VariableContext::current())
+}
+
+#[cfg(test)]
+fn expand_variables_at(text: &str, when: &DateParts) -> String {
+    expand_in(text, when, &VariableContext::empty())
+}
+
+fn expand_in(text: &str, when: &DateParts, vars: &VariableContext) -> String {
+    if !text.contains('{') {
+        return text.to_string();
+    }
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(start) = rest.find('{') {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        let Some(end) = after.find('}') else {
+            out.push('{');
+            out.push_str(after);
+            return out;
+        };
+        let name = after[..end].trim();
+        if let Some(value) = brace_value(name, when, vars) {
+            out.push_str(&value);
+        } else {
+            out.push('{');
+            out.push_str(&after[..end]);
+            out.push('}');
+        }
+        rest = &after[end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+impl VariableContext {
+    fn current() -> Self {
+        Self {
+            clipboard: crate::clipboard::read_clipboard_text()
+                .unwrap_or_default()
+                .replace(CURSOR, ""),
+            user: env_first(&["USERNAME", "USER"]),
+            computer: env_first(&["COMPUTERNAME", "HOSTNAME"]),
+        }
+    }
+
+    #[cfg(test)]
+    fn empty() -> Self {
+        Self {
+            clipboard: String::new(),
+            user: String::new(),
+            computer: String::new(),
+        }
+    }
+}
+
+fn env_first(names: &[&str]) -> String {
+    names
+        .iter()
+        .find_map(|name| std::env::var(name).ok())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_default()
+}
+
+fn brace_value(name: &str, when: &DateParts, vars: &VariableContext) -> Option<String> {
+    if let Some(value) = named_value(name, vars) {
+        return Some(value);
+    }
+    if name.is_empty() || !name.chars().any(|ch| ch.is_ascii_alphabetic()) {
+        return None;
+    }
+    if name.eq_ignore_ascii_case("longdate") {
+        return Some(format_picture(name, when));
+    }
+    let chars: Vec<char> = name.chars().collect();
+    let mut index = 0;
+    while index < chars.len() {
+        if chars[index].is_ascii_alphabetic() {
+            let rest: String = chars[index..].iter().collect();
+            let (len, _) = take_token(&alias_prefix(&rest), when)?;
+            index += len;
+        } else {
+            index += 1;
+        }
+    }
+    Some(format_picture(name, when))
+}
+
+fn named_value(name: &str, vars: &VariableContext) -> Option<String> {
+    if let Some(var) = env_var_name(name) {
+        return std::env::var(var)
+            .ok()
+            .map(|value| value.replace(CURSOR, ""));
+    }
+    let value = match name.to_ascii_lowercase().as_str() {
+        "clipboard" | "clip" => vars.clipboard.clone(),
+        "user" | "username" => vars.user.clone(),
+        "computer" | "hostname" | "host" => vars.computer.clone(),
+        "uuid" | "guid" => new_uuid(),
+        "enter" | "return" | "newline" | "nl" => "\n".to_string(),
+        "tab" => "\t".to_string(),
+        "cursor" | "caret" => CURSOR.to_string(),
+        _ => return None,
+    };
+    Some(value)
+}
+
+fn env_var_name(name: &str) -> Option<&str> {
+    let (prefix, rest) = name.split_at_checked(4)?;
+    if !prefix.eq_ignore_ascii_case("env:") {
+        return None;
+    }
+    let rest = rest.trim();
+    let mut chars = rest.chars();
+    let first = chars.next()?;
+    if !(first.is_ascii_alphabetic() || first == '_')
+        || chars.any(|ch| !(ch.is_ascii_alphanumeric() || ch == '_'))
+    {
+        return None;
+    }
+    Some(rest)
+}
+
+fn new_uuid() -> String {
+    let mut bytes = rand::random::<[u8; 16]>();
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    format!(
+        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        bytes[0],
+        bytes[1],
+        bytes[2],
+        bytes[3],
+        bytes[4],
+        bytes[5],
+        bytes[6],
+        bytes[7],
+        bytes[8],
+        bytes[9],
+        bytes[10],
+        bytes[11],
+        bytes[12],
+        bytes[13],
+        bytes[14],
+        bytes[15]
+    )
+}
+
 pub fn render_at(template: &str, when: &DateParts) -> String {
     if template.contains('{') {
         return expand_braces(template, when);
@@ -214,7 +374,7 @@ fn format_picture(picture: &str, when: &DateParts) -> String {
     let mut out = String::new();
     while index < chars.len() {
         let rest: String = chars[index..].iter().collect();
-        if let Some((len, value)) = take_token(&rest, when) {
+        if let Some((len, value)) = take_token(&alias_prefix(&rest), when) {
             out.push_str(&value);
             index += len;
         } else {
@@ -223,6 +383,24 @@ fn format_picture(picture: &str, when: &DateParts) -> String {
         }
     }
     out
+}
+
+/// Uppercase year and day spellings people write next to `{MM}`. Length stays the same so the scan can advance.
+fn alias_prefix(picture: &str) -> String {
+    const ALIASES: &[(&str, &str)] = &[
+        ("YYYY", "yyyy"),
+        ("YY", "yy"),
+        ("DDDD", "dddd"),
+        ("DDD", "ddd"),
+        ("DD", "dd"),
+        ("D", "d"),
+    ];
+    for (from, to) in ALIASES {
+        if let Some(rest) = picture.strip_prefix(from) {
+            return format!("{to}{rest}");
+        }
+    }
+    picture.to_string()
 }
 
 fn take_token(picture: &str, when: &DateParts) -> Option<(usize, String)> {
@@ -488,7 +666,7 @@ fn write_file(path: &Path, entries: &[Entry], prefix: &str) -> Result<(), String
 
 #[cfg(test)]
 mod tests {
-    use super::{DateParts, FILE_NAME, load, render_at, save, starters};
+    use super::{DateParts, FILE_NAME, expand_variables_at, load, render_at, save, starters};
 
     fn sample() -> DateParts {
         DateParts {
@@ -530,6 +708,64 @@ mod tests {
         let report = render_at(&by_trigger("odate"), &when);
         assert!(report.starts_with("---\rdate: 26.11.14\r"));
         assert!(report.contains("longdate: Saturday, November 14, 2026\r---\r"));
+    }
+
+    #[test]
+    fn snippet_variables_fill_in_and_leave_other_braces_alone() {
+        let when = sample();
+        assert_eq!(
+            expand_variables_at("Due {MM}/{DD}/{YYYY}", &when),
+            "Due 11/14/2026"
+        );
+        assert_eq!(expand_variables_at("{dd} {YY}", &when), "14 26");
+        assert_eq!(expand_variables_at("{MMMM} {ddd}", &when), "November Sat");
+        assert_eq!(expand_variables_at("{HH}:{mm}:{ss} {tt}", &when), "20:34:05 PM");
+        assert_eq!(expand_variables_at("{h:mm tt}", &when), "8:34 PM");
+        assert_eq!(
+            expand_variables_at("{longdate}", &when),
+            "Saturday, November 14, 2026"
+        );
+        assert_eq!(expand_variables_at("Call {hello} at 5", &when), "Call {hello} at 5");
+        assert_eq!(expand_variables_at("Still {MM", &when), "Still {MM");
+        assert_eq!(expand_variables_at("No tokens", &when), "No tokens");
+    }
+
+    #[test]
+    fn named_tokens_fill_in_without_rereading_their_values() {
+        let when = sample();
+        let vars = super::VariableContext {
+            clipboard: "{MM}".into(),
+            user: "Ada".into(),
+            computer: "WORK".into(),
+        };
+        assert_eq!(
+            super::expand_in("Hi {user} on {hostname}", &when, &vars),
+            "Hi Ada on WORK"
+        );
+        assert_eq!(
+            super::expand_in("[{clipboard}]", &when, &vars),
+            "[{MM}]"
+        );
+        assert_eq!(
+            super::expand_in("a{cursor}b{caret}c", &when, &vars),
+            format!("a{}b{}c", super::CURSOR, super::CURSOR)
+        );
+        assert_eq!(super::expand_in("a{enter}b", &when, &vars), "a\nb");
+        assert_eq!(super::expand_in("a{tab}b", &when, &vars), "a\tb");
+        assert_eq!(super::expand_in("{MM}", &when, &vars), "11");
+        let both = super::expand_in("{uuid} {guid}", &when, &vars);
+        let mut parts = both.split(' ');
+        let first = parts.next().unwrap();
+        let second = parts.next().unwrap();
+        assert_eq!(first.len(), 36);
+        assert_ne!(first, second);
+        if let Ok(user) = std::env::var("USERNAME") {
+            assert_eq!(super::expand_in("{env:USERNAME}", &when, &vars), user);
+        }
+        assert_eq!(
+            super::expand_in("{env:CE_EXPANSION_MISSING}", &when, &vars),
+            "{env:CE_EXPANSION_MISSING}"
+        );
     }
 
     #[test]
