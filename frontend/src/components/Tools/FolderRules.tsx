@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ArrowDown, ArrowUp, FolderOpen, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type {
   FolderRule,
   FolderRuleAction,
@@ -82,6 +82,10 @@ export function FolderRules({ onOpenSettings }: Props) {
   const [preview, setPreview] = useState<FolderRuleActivity[] | null>(null);
   const [activity, setActivity] = useState<FolderRuleActivity[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
+  const removeTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(removeTimer.current), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,6 +129,26 @@ export function FolderRules({ onOpenSettings }: Props) {
       return;
     }
     edit(folders.map((folder) => (folder.id === selected.id ? change(folder) : folder)));
+  }
+
+  function setFolderEnabled(folderId: string, enabled: boolean) {
+    edit(folders.map((folder) => (folder.id === folderId ? { ...folder, enabled } : folder)));
+  }
+
+  function askRemoveFolder(folderId: string) {
+    if (pendingRemoveId === folderId) {
+      window.clearTimeout(removeTimer.current);
+      setPendingRemoveId(null);
+      const remaining = folders.filter((folder) => folder.id !== folderId);
+      edit(remaining);
+      if (selectedId === folderId) {
+        setSelectedId(remaining[0]?.id ?? null);
+      }
+      return;
+    }
+    setPendingRemoveId(folderId);
+    window.clearTimeout(removeTimer.current);
+    removeTimer.current = window.setTimeout(() => setPendingRemoveId(null), 3000);
   }
 
   function editRule(ruleId: string, change: (rule: FolderRule) => FolderRule) {
@@ -299,35 +323,61 @@ export function FolderRules({ onOpenSettings }: Props) {
             </p>
           ) : (
             <ul id="folder-rules-folder-list" className="flex flex-col gap-1">
-              {folders.map((folder) => (
-                <li id={`folder-rules-folder-${folder.id}`} key={folder.id}>
-                  <button
-                    id={`folder-rules-folder-${folder.id}-select`}
-                    type="button"
-                    onClick={() => {
-                      setSelectedId(folder.id);
-                      setPreview(null);
-                    }}
-                    title={folder.path}
+              {folders.map((folder) => {
+                const confirming = pendingRemoveId === folder.id;
+                return (
+                  <li
+                    id={`folder-rules-folder-${folder.id}`}
+                    key={folder.id}
                     className={cn(
-                      "flex w-full flex-col rounded-md px-2 py-1.5 text-left",
+                      "flex items-center gap-2 rounded-md pr-1.5",
                       folder.id === selectedId ? "row-selected" : "hover:bg-zinc-800",
                     )}
                   >
-                    <span id={`folder-rules-folder-${folder.id}-name`} className={cn("truncate text-sm", folder.enabled ? "text-zinc-100" : "text-zinc-500")}>
-                      {baseName(folder.path) || folder.path}
-                    </span>
-                    <span id={`folder-rules-folder-${folder.id}-meta`} className="truncate text-xs text-zinc-500">
-                      {folder.rules.length} rule{folder.rules.length === 1 ? "" : "s"}
-                      {folder.enabled ? "" : " · paused"}
-                    </span>
-                  </button>
-                </li>
-              ))}
+                    <button
+                      id={`folder-rules-folder-${folder.id}-select`}
+                      type="button"
+                      onClick={() => {
+                        setSelectedId(folder.id);
+                        setPreview(null);
+                      }}
+                      title={folder.path}
+                      className="flex min-w-0 flex-1 flex-col rounded-md px-2 py-1.5 text-left"
+                    >
+                      <span id={`folder-rules-folder-${folder.id}-name`} className={cn("truncate text-sm", folder.enabled ? "text-zinc-100" : "text-zinc-500")}>
+                        {baseName(folder.path) || folder.path}
+                      </span>
+                      <span id={`folder-rules-folder-${folder.id}-meta`} className="truncate text-xs text-zinc-500">
+                        {folder.rules.length} rule{folder.rules.length === 1 ? "" : "s"}
+                      </span>
+                    </button>
+                    <Switch
+                      id={`folder-rules-folder-${folder.id}-watch`}
+                      checked={folder.enabled}
+                      onChange={(enabled) => setFolderEnabled(folder.id, enabled)}
+                    />
+                    <Button
+                      id={`folder-rules-folder-${folder.id}-remove`}
+                      variant={confirming ? "destructive" : "ghost"}
+                      size="xs"
+                      title={confirming ? "Click again to remove this folder" : "Remove folder"}
+                      aria-label={confirming ? "Confirm remove folder" : "Remove folder"}
+                      onClick={() => askRemoveFolder(folder.id)}
+                    >
+                      {confirming ? (
+                        <span id={`folder-rules-folder-${folder.id}-remove-label`}>Remove?</span>
+                      ) : (
+                        <Trash2 id={`folder-rules-folder-${folder.id}-remove-icon`} className="size-3.5" aria-hidden="true" />
+                      )}
+                    </Button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </aside>
-        <div id="folder-rules-main" className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+        <div id="folder-rules-main" className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div id="folder-rules-editor" className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
           {selected ? (
             <>
               <div id="folder-rules-selected" className="flex flex-wrap items-center gap-2">
@@ -335,15 +385,6 @@ export function FolderRules({ onOpenSettings }: Props) {
                 <span id="folder-rules-selected-path" className="min-w-0 flex-1 truncate text-sm text-zinc-200" title={selected.path}>
                   {selected.path}
                 </span>
-                <label id="folder-rules-selected-enabled-label" className="flex items-center gap-1.5 text-sm text-zinc-300">
-                  <input
-                    id="folder-rules-selected-enabled"
-                    type="checkbox"
-                    checked={selected.enabled}
-                    onChange={(event) => editSelected((folder) => ({ ...folder, enabled: event.target.checked }))}
-                  />
-                  Watch
-                </label>
                 <Button
                   id="folder-rules-preview"
                   variant="outline"
@@ -363,18 +404,6 @@ export function FolderRules({ onOpenSettings }: Props) {
                   onClick={() => void run(false)}
                 >
                   Run now
-                </Button>
-                <Button
-                  id="folder-rules-remove-folder"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    edit(folders.filter((folder) => folder.id !== selected.id));
-                    setSelectedId(folders.find((folder) => folder.id !== selected.id)?.id ?? null);
-                  }}
-                >
-                  <Trash2 id="folder-rules-remove-folder-icon" className="size-3.5" aria-hidden="true" />
-                  Remove folder
                 </Button>
               </div>
               {preview ? <PreviewTable rows={preview} /> : null}
@@ -416,10 +445,49 @@ export function FolderRules({ onOpenSettings }: Props) {
               Choose or add a watched folder.
             </p>
           )}
+          </div>
           <ActivityLog rows={activity} />
         </div>
       </div>
     </section>
+  );
+}
+
+function Switch({
+  id,
+  checked,
+  labelled = false,
+  onChange,
+}: {
+  id: string;
+  checked: boolean;
+  labelled?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const word = checked ? "On" : "Off";
+  return (
+    <span id={`${id}-wrap`} className="inline-flex shrink-0 items-center gap-2">
+      <button
+        id={id}
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={labelled ? `Rule ${word}` : `Watch ${word}`}
+        title={labelled ? word : `Watch ${word}`}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          "inline-flex h-4 w-7 shrink-0 items-center rounded-full border p-px transition-colors",
+          checked ? "justify-end border-emerald-700 bg-emerald-600" : "justify-start border-zinc-600 bg-zinc-800",
+        )}
+      >
+        <span id={`${id}-thumb`} className="size-3 rounded-full bg-zinc-100 shadow-sm" />
+      </button>
+      {labelled ? (
+        <span id={`${id}-label`} className="flex h-4 w-7 translate-y-px items-center text-xs font-medium leading-none text-zinc-300 mt-[-2px]">
+          {word}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -435,6 +503,7 @@ type RuleEditorProps = {
 
 function RuleEditor({ rule, first, last, onChange, onMove, onRemove, onBrowse }: RuleEditorProps) {
   const [extensions, setExtensions] = useState(rule.match.extensions.join(", "));
+  const [expanded, setExpanded] = useState(true);
   const base = `folder-rules-rule-${rule.id}`;
 
   useEffect(() => {
@@ -476,13 +545,6 @@ function RuleEditor({ rule, first, last, onChange, onMove, onRemove, onBrowse }:
   return (
     <article id={base} className={cn("flex flex-col gap-3 rounded-lg border border-zinc-800 bg-zinc-900 p-3", !rule.enabled && "opacity-60")}>
       <div id={`${base}-header`} className="flex items-center gap-2">
-        <input
-          id={`${base}-enabled`}
-          type="checkbox"
-          checked={rule.enabled}
-          aria-label="Rule enabled"
-          onChange={(event) => onChange((current) => ({ ...current, enabled: event.target.checked }))}
-        />
         <label id={`${base}-name-label`} htmlFor={`${base}-name`} className="sr-only">
           Rule name
         </label>
@@ -491,6 +553,12 @@ function RuleEditor({ rule, first, last, onChange, onMove, onRemove, onBrowse }:
           value={rule.name}
           onChange={(event) => onChange((current) => ({ ...current, name: event.target.value }))}
           className={cn(INPUT, "min-w-0 flex-1 font-medium")}
+        />
+        <Switch
+          id={`${base}-enabled`}
+          checked={rule.enabled}
+          labelled
+          onChange={(enabled) => onChange((current) => ({ ...current, enabled }))}
         />
         <Button id={`${base}-up`} variant="ghost" size="xs" disabled={first} title="Move up" onClick={() => onMove(-1)}>
           <ArrowUp id={`${base}-up-icon`} className="size-3.5" aria-hidden="true" />
@@ -501,7 +569,24 @@ function RuleEditor({ rule, first, last, onChange, onMove, onRemove, onBrowse }:
         <Button id={`${base}-remove`} variant="ghost" size="xs" title="Delete rule" onClick={onRemove}>
           <Trash2 id={`${base}-remove-icon`} className="size-3.5" aria-hidden="true" />
         </Button>
+        <Button
+          id={`${base}-expand`}
+          variant="ghost"
+          size="xs"
+          title={expanded ? "Collapse rule" : "Expand rule"}
+          aria-expanded={expanded}
+          aria-controls={`${base}-body`}
+          onClick={() => setExpanded((current) => !current)}
+        >
+          {expanded ? (
+            <ChevronsDownUp id={`${base}-expand-icon`} className="size-3.5" aria-hidden="true" />
+          ) : (
+            <ChevronsUpDown id={`${base}-expand-icon`} className="size-3.5" aria-hidden="true" />
+          )}
+        </Button>
       </div>
+      {expanded ? (
+        <div id={`${base}-body`} className="flex flex-col gap-3">
       <fieldset id={`${base}-match`} className="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-4">
         <legend id={`${base}-match-legend`} className="mb-1 text-xs font-medium tracking-wide text-zinc-500 uppercase">
           When the file
@@ -674,6 +759,8 @@ function RuleEditor({ rule, first, last, onChange, onMove, onRemove, onBrowse }:
           </Button>
         </div>
       </fieldset>
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -738,37 +825,221 @@ function PreviewTable({ rows }: { rows: FolderRuleActivity[] }) {
   );
 }
 
+const ACTIVITY_HEIGHT_KEY = "ce-desktop-tools.folder-rules.activity-height";
+const ACTIVITY_OPEN_KEY = "ce-desktop-tools.folder-rules.activity-open";
+const ACTIVITY_DEFAULT = 272;
+const ACTIVITY_MIN = 96;
+const ACTIVITY_MAX = 560;
+const ACTIVITY_STEP = 16;
+
+function readActivityHeight() {
+  try {
+    const raw = localStorage.getItem(ACTIVITY_HEIGHT_KEY);
+    const parsed = raw ? Number(raw) : ACTIVITY_DEFAULT;
+    return Number.isFinite(parsed) ? clampActivityHeight(parsed, ACTIVITY_MAX) : ACTIVITY_DEFAULT;
+  } catch {
+    return ACTIVITY_DEFAULT;
+  }
+}
+
+function readActivityOpen() {
+  try {
+    return localStorage.getItem(ACTIVITY_OPEN_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+function writeActivityHeight(height: number) {
+  try {
+    localStorage.setItem(ACTIVITY_HEIGHT_KEY, String(height));
+  } catch {
+    // The resized height still applies for this session.
+  }
+}
+
+function writeActivityOpen(open: boolean) {
+  try {
+    localStorage.setItem(ACTIVITY_OPEN_KEY, open ? "1" : "0");
+  } catch {
+    // The open state still applies for this session.
+  }
+}
+
+function clampActivityHeight(height: number, limit: number) {
+  const max = Math.max(ACTIVITY_MIN, Math.min(ACTIVITY_MAX, limit));
+  return Math.min(Math.max(height, ACTIVITY_MIN), max);
+}
+
 function ActivityLog({ rows }: { rows: FolderRuleActivity[] }) {
+  const [open, setOpen] = useState(readActivityOpen);
+  const [height, setHeight] = useState(readActivityHeight);
+  const heightRef = useRef(height);
+  const sectionRef = useRef<HTMLElement>(null);
+  const drag = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
+
+  const limit = useCallback(() => {
+    const parent = sectionRef.current?.parentElement?.clientHeight ?? ACTIVITY_MAX + 120;
+    return parent - 120;
+  }, []);
+
+  const applyHeight = useCallback(
+    (next: number) => {
+      const clamped = clampActivityHeight(next, limit());
+      heightRef.current = clamped;
+      setHeight(clamped);
+      return clamped;
+    },
+    [limit],
+  );
+
+  const toggle = useCallback(() => {
+    setOpen((current) => {
+      const next = !current;
+      writeActivityOpen(next);
+      return next;
+    });
+  }, []);
+
+  const onPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startHeight: heightRef.current,
+    };
+  }, []);
+
+  const onPointerMove = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      const active = drag.current;
+      if (!active || active.pointerId !== event.pointerId) {
+        return;
+      }
+      applyHeight(active.startHeight + active.startY - event.clientY);
+    },
+    [applyHeight],
+  );
+
+  const endDrag = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    const active = drag.current;
+    if (!active || active.pointerId !== event.pointerId) {
+      return;
+    }
+    drag.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    writeActivityHeight(heightRef.current);
+  }, []);
+
+  const onKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      const next =
+        event.key === "ArrowUp"
+          ? heightRef.current + ACTIVITY_STEP
+          : event.key === "ArrowDown"
+            ? heightRef.current - ACTIVITY_STEP
+            : event.key === "Home"
+              ? ACTIVITY_MIN
+              : event.key === "End"
+                ? limit()
+                : null;
+      if (next === null) {
+        return;
+      }
+      event.preventDefault();
+      writeActivityHeight(applyHeight(next));
+    },
+    [applyHeight, limit],
+  );
+
+  const onDoubleClick = useCallback(() => {
+    writeActivityHeight(applyHeight(ACTIVITY_DEFAULT));
+  }, [applyHeight]);
+
   return (
-    <section id="folder-rules-activity" className="mt-auto flex flex-col gap-2 border-t border-zinc-800 pt-4">
-      <h2 id="folder-rules-activity-title" className="text-sm font-medium text-zinc-100">
-        Activity this session
+    <section
+      id="folder-rules-activity"
+      ref={sectionRef}
+      style={open ? { height } : undefined}
+      className="relative flex shrink-0 flex-col border-t border-zinc-800 bg-zinc-950"
+    >
+      {open ? (
+        <div
+          id="folder-rules-activity-resize"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize activity"
+          aria-valuemin={ACTIVITY_MIN}
+          aria-valuemax={ACTIVITY_MAX}
+          aria-valuenow={Math.round(height)}
+          tabIndex={0}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onKeyDown={onKeyDown}
+          onDoubleClick={onDoubleClick}
+          className="group absolute inset-x-0 -top-1.5 z-10 h-3 cursor-row-resize touch-none focus-visible:outline focus-visible:outline-sky-500"
+        >
+          <span
+            id="folder-rules-activity-resize-grip"
+            className="pointer-events-none absolute inset-x-0 top-1.5 h-px bg-transparent group-hover:bg-sky-500 group-focus-visible:bg-sky-500"
+          />
+        </div>
+      ) : null}
+      <h2 id="folder-rules-activity-heading" className="shrink-0">
+        <button
+          id="folder-rules-activity-toggle"
+          type="button"
+          aria-expanded={open}
+          aria-controls="folder-rules-activity-body"
+          onClick={toggle}
+          className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-medium text-zinc-100 hover:bg-zinc-900"
+        >
+          {open ? (
+            <ChevronDown id="folder-rules-activity-chevron" className="size-4 text-zinc-400" aria-hidden="true" />
+          ) : (
+            <ChevronRight id="folder-rules-activity-chevron" className="size-4 text-zinc-400" aria-hidden="true" />
+          )}
+          <span id="folder-rules-activity-title">Activity this session</span>
+          <span id="folder-rules-activity-count" className="text-xs font-normal text-zinc-500">
+            {rows.length}
+          </span>
+        </button>
       </h2>
-      {rows.length === 0 ? (
-        <p id="folder-rules-activity-empty" className="text-sm text-zinc-500">
-          Nothing has been handled yet.
-        </p>
-      ) : (
-        <ul id="folder-rules-activity-list" className="flex max-h-56 flex-col gap-1 overflow-y-auto">
-          {rows.map((row, index) => (
-            <li id={`folder-rules-activity-${index}`} key={`${row.at}-${index}`} className="flex items-baseline gap-3 text-sm">
-              <span id={`folder-rules-activity-${index}-time`} className="shrink-0 font-mono text-xs text-zinc-500">
-                {timeOf(row.at)}
-              </span>
-              <span id={`folder-rules-activity-${index}-outcome`} className={cn("w-16 shrink-0 text-xs", OUTCOME_STYLES[row.outcome])}>
-                {row.outcome}
-              </span>
-              <span id={`folder-rules-activity-${index}-file`} className="min-w-0 flex-1 truncate text-zinc-200" title={row.to || row.file}>
-                {row.file}
-                <span id={`folder-rules-activity-${index}-detail`} className="text-zinc-500">
-                  {" "}
-                  · {row.rule} · {activityDetail(row)}
+      <div id="folder-rules-activity-body" hidden={!open} className="min-h-0 flex-1 overflow-y-auto px-4 pb-3">
+        {rows.length === 0 ? (
+          <p id="folder-rules-activity-empty" className="text-sm text-zinc-500">
+            Nothing has been handled yet.
+          </p>
+        ) : (
+          <ul id="folder-rules-activity-list" className="flex flex-col gap-1">
+            {rows.map((row, index) => (
+              <li id={`folder-rules-activity-${index}`} key={`${row.at}-${index}`} className="flex items-baseline gap-3 text-sm">
+                <span id={`folder-rules-activity-${index}-time`} className="shrink-0 font-mono text-xs text-zinc-500">
+                  {timeOf(row.at)}
                 </span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+                <span id={`folder-rules-activity-${index}-outcome`} className={cn("w-16 shrink-0 text-xs", OUTCOME_STYLES[row.outcome])}>
+                  {row.outcome}
+                </span>
+                <span id={`folder-rules-activity-${index}-file`} className="min-w-0 flex-1 truncate text-zinc-200" title={row.to || row.file}>
+                  {row.file}
+                  <span id={`folder-rules-activity-${index}-detail`} className="text-zinc-500">
+                    {" "}
+                    · {row.rule} · {activityDetail(row)}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }

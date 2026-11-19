@@ -344,7 +344,20 @@ fn launcher_save(
 }
 
 #[tauri::command]
-async fn launcher_query(app: tauri::AppHandle, text: String) -> Result<Vec<launcher::LauncherResult>, String> {
+fn units_query(text: String) -> launcher::units::UnitsAnswer {
+    launcher::units::interpret(&text)
+}
+
+#[tauri::command]
+fn units_catalog() -> launcher::units::UnitsCatalog {
+    launcher::units::catalog()
+}
+
+#[tauri::command]
+async fn launcher_query(
+    app: tauri::AppHandle,
+    text: String,
+) -> Result<Vec<launcher::LauncherResult>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         app.try_state::<launcher::Launcher>()
             .map(|launcher| launcher.query(&text))
@@ -372,7 +385,9 @@ fn launcher_refresh_apps() {
 }
 
 #[tauri::command]
-fn folder_rules_state(rules: tauri::State<'_, folder_rules::FolderRules>) -> folder_rules::FolderRulesState {
+fn folder_rules_state(
+    rules: tauri::State<'_, folder_rules::FolderRules>,
+) -> folder_rules::FolderRulesState {
     rules.state()
 }
 
@@ -599,6 +614,8 @@ pub fn run() {
             pantherbar_fit,
             launcher_state,
             launcher_save,
+            units_query,
+            units_catalog,
             launcher_query,
             launcher_run,
             launcher_hide,

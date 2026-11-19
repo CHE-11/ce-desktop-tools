@@ -123,6 +123,11 @@ const TOOLS: &[Entry] = &[
         keywords: "symbols",
     },
     Entry {
+        id: "units",
+        title: "Units",
+        keywords: "convert units calculate math",
+    },
+    Entry {
         id: "app-shortcuts",
         title: "Keyboard Shortcuts",
         keywords: "hotkeys",
@@ -609,8 +614,14 @@ fn place(window: &tauri::WebviewWindow) {
         let height = (HEIGHT * scale).min(area_height - 32.0).max(200.0);
         let x = area.left as f64 + (area_width - width) / 2.0;
         let y = area.top as f64 + area_height * 0.18;
-        let _ = window.set_position(tauri::PhysicalPosition::new(x.round() as i32, y.round() as i32));
-        let _ = window.set_size(tauri::PhysicalSize::new(width.round() as u32, height.round() as u32));
+        let _ = window.set_position(tauri::PhysicalPosition::new(
+            x.round() as i32,
+            y.round() as i32,
+        ));
+        let _ = window.set_size(tauri::PhysicalSize::new(
+            width.round() as u32,
+            height.round() as u32,
+        ));
     }
     #[cfg(not(windows))]
     {
@@ -639,7 +650,8 @@ fn force_foreground(window: &tauri::WebviewWindow) {
         } else {
             GetWindowThreadProcessId(foreground, None)
         };
-        let attached = other != 0 && other != current && AttachThreadInput(current, other, true).as_bool();
+        let attached =
+            other != 0 && other != current && AttachThreadInput(current, other, true).as_bool();
         let _ = SetForegroundWindow(target);
         let _ = BringWindowToTop(target);
         if attached {

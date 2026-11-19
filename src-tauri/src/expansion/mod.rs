@@ -1156,7 +1156,11 @@ impl Inner {
     }
 }
 
-fn remaining_lock_seconds(locked: bool, deadline: Option<SystemTime>, now: SystemTime) -> Option<u64> {
+fn remaining_lock_seconds(
+    locked: bool,
+    deadline: Option<SystemTime>,
+    now: SystemTime,
+) -> Option<u64> {
     if locked {
         return None;
     }

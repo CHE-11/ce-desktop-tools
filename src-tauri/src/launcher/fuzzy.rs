@@ -23,13 +23,15 @@ pub fn score(query: &str, text: &str) -> Option<i32> {
 }
 
 fn word_start(text: &str, query: &str) -> Option<usize> {
-    text.match_indices(query).map(|(index, _)| index).find(|&index| {
-        index > 0
-            && text[..index]
-                .chars()
-                .next_back()
-                .is_some_and(|ch| !ch.is_alphanumeric())
-    })
+    text.match_indices(query)
+        .map(|(index, _)| index)
+        .find(|&index| {
+            index > 0
+                && text[..index]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|ch| !ch.is_alphanumeric())
+        })
 }
 
 /// Every typed character appears in order. Returns the characters skipped

@@ -171,14 +171,18 @@ mod win {
     }
 
     fn exe_name(wide: &[u16]) -> String {
-        let end = wide.iter().position(|unit| *unit == 0).unwrap_or(wide.len());
+        let end = wide
+            .iter()
+            .position(|unit| *unit == 0)
+            .unwrap_or(wide.len());
         String::from_utf16_lossy(&wide[..end])
     }
 
     /// The command line of `pid`, read from its process block. `None` when Windows will not share it.
     fn command_line(pid: u32) -> Option<String> {
         unsafe {
-            let handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid).ok()?;
+            let handle =
+                OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid).ok()?;
             let line = read_command_line(handle);
             let _ = CloseHandle(handle);
             line
@@ -294,7 +298,9 @@ mod tests {
     fn only_an_autohotkey_host_counts() {
         assert!(is_autohotkey_host("AutoHotkey64.exe"));
         assert!(is_autohotkey_host("AutoHotkey.exe"));
-        assert!(is_autohotkey_host(r"C:\Program Files\AutoHotkey\AutoHotkeyU64.exe"));
+        assert!(is_autohotkey_host(
+            r"C:\Program Files\AutoHotkey\AutoHotkeyU64.exe"
+        ));
         assert!(!is_autohotkey_host("notepad.exe"));
         assert!(!is_autohotkey_host("NotAutoHotkey.exe"));
     }

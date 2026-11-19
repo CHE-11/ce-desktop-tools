@@ -87,11 +87,18 @@ impl PortPattern {
     }
 
     fn bound(&self, wildcard: u8) -> u32 {
-        self.digits.iter().enumerate().fold(0u32, |value, (index, digit)| {
-            // A leading wildcard cannot be 0, or the port would have fewer digits.
-            let fill = if index == 0 && wildcard == 0 { 1 } else { wildcard };
-            value * 10 + u32::from(digit.unwrap_or(fill))
-        })
+        self.digits
+            .iter()
+            .enumerate()
+            .fold(0u32, |value, (index, digit)| {
+                // A leading wildcard cannot be 0, or the port would have fewer digits.
+                let fill = if index == 0 && wildcard == 0 {
+                    1
+                } else {
+                    wildcard
+                };
+                value * 10 + u32::from(digit.unwrap_or(fill))
+            })
     }
 
     /// Lowest and highest port the pattern can match, clamped to real ports.
@@ -313,9 +320,10 @@ fn terminate(pid: u32) -> Result<(), String> {
         OpenProcess, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
     };
     unsafe {
-        let handle = OpenProcess(PROCESS_TERMINATE | PROCESS_SYNCHRONIZE, false, pid).map_err(|_| {
-            format!("Windows refused to close process {pid}. It may need administrator rights.")
-        })?;
+        let handle =
+            OpenProcess(PROCESS_TERMINATE | PROCESS_SYNCHRONIZE, false, pid).map_err(|_| {
+                format!("Windows refused to close process {pid}. It may need administrator rights.")
+            })?;
         let result = TerminateProcess(handle, 1);
         if result.is_ok() {
             let _ = WaitForSingleObject(handle, 2000);
@@ -352,7 +360,9 @@ fn port_of(raw: u32) -> u16 {
 /// Calls an IP Helper table function twice: once for the size, once for the
 /// rows. The buffer is made of `u64`s so the table header is aligned.
 #[cfg(windows)]
-fn read_table(fill: impl Fn(Option<*mut std::ffi::c_void>, &mut u32) -> u32) -> Result<Vec<u64>, String> {
+fn read_table(
+    fill: impl Fn(Option<*mut std::ffi::c_void>, &mut u32) -> u32,
+) -> Result<Vec<u64>, String> {
     const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
     let mut size = 0u32;
     let mut buffer: Vec<u64> = Vec::new();
@@ -377,9 +387,9 @@ fn read_table(fill: impl Fn(Option<*mut std::ffi::c_void>, &mut u32) -> u32) -> 
 pub fn port_owners(pattern: &PortPattern) -> Result<Vec<PortOwner>, String> {
     use std::net::{Ipv4Addr, Ipv6Addr};
     use windows::Win32::NetworkManagement::IpHelper::{
-        GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCP6TABLE_OWNER_PID,
-        MIB_TCPTABLE_OWNER_PID, MIB_UDP6TABLE_OWNER_PID, MIB_UDPTABLE_OWNER_PID,
-        TCP_TABLE_OWNER_PID_ALL, UDP_TABLE_OWNER_PID,
+        GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCP6TABLE_OWNER_PID, MIB_TCPTABLE_OWNER_PID,
+        MIB_UDP6TABLE_OWNER_PID, MIB_UDPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_ALL,
+        UDP_TABLE_OWNER_PID,
     };
     use windows::Win32::Networking::WinSock::{AF_INET, AF_INET6};
 
@@ -398,7 +408,14 @@ pub fn port_owners(pattern: &PortPattern) -> Result<Vec<PortOwner>, String> {
 
     unsafe {
         let buffer = read_table(|table, size| {
-            GetExtendedTcpTable(table, size, false, AF_INET.0 as u32, TCP_TABLE_OWNER_PID_ALL, 0)
+            GetExtendedTcpTable(
+                table,
+                size,
+                false,
+                AF_INET.0 as u32,
+                TCP_TABLE_OWNER_PID_ALL,
+                0,
+            )
         })?;
         let table = &*(buffer.as_ptr() as *const MIB_TCPTABLE_OWNER_PID);
         let rows = std::slice::from_raw_parts(table.table.as_ptr(), table.dwNumEntries as usize);
@@ -412,7 +429,10 @@ pub fn port_owners(pattern: &PortPattern) -> Result<Vec<PortOwner>, String> {
                 protocol: "TCP".into(),
                 local_port: local,
                 local_address: format!("{}:{local}", Ipv4Addr::from(u32::from_be(row.dwLocalAddr))),
-                remote_address: format!("{}:{remote}", Ipv4Addr::from(u32::from_be(row.dwRemoteAddr))),
+                remote_address: format!(
+                    "{}:{remote}",
+                    Ipv4Addr::from(u32::from_be(row.dwRemoteAddr))
+                ),
                 state: tcp_state(row.dwState).into(),
                 pid: row.dwOwningPid,
                 name: name_of(row.dwOwningPid),
@@ -420,7 +440,14 @@ pub fn port_owners(pattern: &PortPattern) -> Result<Vec<PortOwner>, String> {
         }
 
         let buffer = read_table(|table, size| {
-            GetExtendedTcpTable(table, size, false, AF_INET6.0 as u32, TCP_TABLE_OWNER_PID_ALL, 0)
+            GetExtendedTcpTable(
+                table,
+                size,
+                false,
+                AF_INET6.0 as u32,
+                TCP_TABLE_OWNER_PID_ALL,
+                0,
+            )
         })?;
         let table = &*(buffer.as_ptr() as *const MIB_TCP6TABLE_OWNER_PID);
         let rows = std::slice::from_raw_parts(table.table.as_ptr(), table.dwNumEntries as usize);
@@ -463,7 +490,14 @@ pub fn port_owners(pattern: &PortPattern) -> Result<Vec<PortOwner>, String> {
         }
 
         let buffer = read_table(|table, size| {
-            GetExtendedUdpTable(table, size, false, AF_INET6.0 as u32, UDP_TABLE_OWNER_PID, 0)
+            GetExtendedUdpTable(
+                table,
+                size,
+                false,
+                AF_INET6.0 as u32,
+                UDP_TABLE_OWNER_PID,
+                0,
+            )
         })?;
         let table = &*(buffer.as_ptr() as *const MIB_UDP6TABLE_OWNER_PID);
         let rows = std::slice::from_raw_parts(table.table.as_ptr(), table.dwNumEntries as usize);
@@ -522,13 +556,19 @@ pub fn file_lockers(path: &str) -> Result<Vec<FileLocker>, String> {
         let mut key = [0u16; CCH_RM_SESSION_KEY as usize + 1];
         let started = RmStartSession(&mut session, None, PWSTR(key.as_mut_ptr()));
         if started != ERROR_SUCCESS {
-            return Err(format!("Couldn't ask Windows who is using the file (error {}).", started.0));
+            return Err(format!(
+                "Couldn't ask Windows who is using the file (error {}).",
+                started.0
+            ));
         }
         let outcome = (|| {
             let files = [PCWSTR(wide.as_ptr())];
             let registered = RmRegisterResources(session, Some(&files), None, None);
             if registered != ERROR_SUCCESS {
-                return Err(format!("Couldn't check that file (error {}).", registered.0));
+                return Err(format!(
+                    "Couldn't check that file (error {}).",
+                    registered.0
+                ));
             }
             let mut needed = 0u32;
             let mut reasons = 0u32;
@@ -546,7 +586,10 @@ pub fn file_lockers(path: &str) -> Result<Vec<FileLocker>, String> {
                     return Ok(infos);
                 }
                 if result != ERROR_MORE_DATA {
-                    return Err(format!("Couldn't list what holds that file (error {}).", result.0));
+                    return Err(format!(
+                        "Couldn't list what holds that file (error {}).",
+                        result.0
+                    ));
                 }
                 infos = vec![RM_PROCESS_INFO::default(); needed as usize + 2];
             }
@@ -561,7 +604,11 @@ pub fn file_lockers(path: &str) -> Result<Vec<FileLocker>, String> {
                 let (name, path) = paths.get(&pid).cloned().unwrap_or_default();
                 FileLocker {
                     pid,
-                    name: if name.is_empty() { format!("PID {pid}") } else { name },
+                    name: if name.is_empty() {
+                        format!("PID {pid}")
+                    } else {
+                        name
+                    },
                     app_name: wide_text(&info.strAppName),
                     path,
                 }

@@ -26,7 +26,14 @@ const MAX_RULES: usize = 50;
 const MAX_STEPS: usize = 8;
 const ACTIONS: &[&str] = &["move", "copy", "recycle", "rename"];
 const CONFLICTS: &[&str] = &["number", "skip", "overwrite"];
-const PARTIAL: &[&str] = &["crdownload", "part", "partial", "tmp", "download", "opdownload"];
+const PARTIAL: &[&str] = &[
+    "crdownload",
+    "part",
+    "partial",
+    "tmp",
+    "download",
+    "opdownload",
+];
 
 fn enabled_default() -> bool {
     true
@@ -240,7 +247,11 @@ impl FolderRules {
         }
     }
 
-    pub fn save(&self, enabled: bool, folders: Vec<WatchedFolder>) -> Result<FolderRulesState, String> {
+    pub fn save(
+        &self,
+        enabled: bool,
+        folders: Vec<WatchedFolder>,
+    ) -> Result<FolderRulesState, String> {
         let folder = crate::app_settings::settings_folder(&self.inner.app).unwrap_or_default();
         if folder.is_empty() || !Path::new(&folder).is_dir() {
             return Err(
@@ -271,7 +282,11 @@ impl FolderRules {
 
     /// Applies rules to the files already in one folder, or in every enabled
     /// folder when `folder_id` is `None`. A dry run only reports the plan.
-    pub fn run(&self, folder_id: Option<String>, dry_run: bool) -> Result<Vec<ActivityEntry>, String> {
+    pub fn run(
+        &self,
+        folder_id: Option<String>,
+        dry_run: bool,
+    ) -> Result<Vec<ActivityEntry>, String> {
         let file = get(&self.inner.file);
         let folders: Vec<WatchedFolder> = match &folder_id {
             Some(id) => {
@@ -293,7 +308,15 @@ impl FolderRules {
         let mut entries = Vec::new();
         for folder in folders {
             let Ok(children) = fs::read_dir(&folder.path) else {
-                entries.push(entry(&folder.path, "", "", "", "error", "", "Couldn't read this folder."));
+                entries.push(entry(
+                    &folder.path,
+                    "",
+                    "",
+                    "",
+                    "error",
+                    "",
+                    "Couldn't read this folder.",
+                ));
                 continue;
             };
             let mut files: Vec<PathBuf> = children
@@ -345,13 +368,19 @@ impl FolderRules {
         let mut watcher = match watcher {
             Ok(watcher) => watcher,
             Err(error) => {
-                set(&self.inner.error, Some(format!("Couldn't watch folders: {error}")));
+                set(
+                    &self.inner.error,
+                    Some(format!("Couldn't watch folders: {error}")),
+                );
                 return;
             }
         };
         for path in paths {
             if let Err(error) = watcher.watch(Path::new(&path), RecursiveMode::NonRecursive) {
-                set(&self.inner.error, Some(format!("Couldn't watch {path}: {error}")));
+                set(
+                    &self.inner.error,
+                    Some(format!("Couldn't watch {path}: {error}")),
+                );
             }
         }
         *slot = Some(watcher);
@@ -523,7 +552,12 @@ fn same_path(left: &Path, right: &Path) -> bool {
 
 fn skip_file(path: &Path) -> bool {
     let name = display_name(path).to_lowercase();
-    if name.is_empty() || name.starts_with("~$") || name.starts_with('.') || name == "desktop.ini" || name == "thumbs.db" {
+    if name.is_empty()
+        || name.starts_with("~$")
+        || name.starts_with('.')
+        || name == "desktop.ini"
+        || name == "thumbs.db"
+    {
         return true;
     }
     let extension = extension_of(path);
@@ -817,7 +851,8 @@ fn ensure_parent(target: &Path) -> Result<(), String> {
 /// `rename` fails across drives, so fall back to copy and delete.
 fn move_file(from: &Path, to: &Path) -> Result<(), String> {
     if to.exists() {
-        fs::remove_file(to).map_err(|error| format!("Couldn't replace {}: {error}", to.display()))?;
+        fs::remove_file(to)
+            .map_err(|error| format!("Couldn't replace {}: {error}", to.display()))?;
     }
     if fs::rename(from, to).is_ok() {
         return Ok(());
@@ -861,7 +896,11 @@ fn rename_to(pattern: &str, path: &Path) -> String {
         .extension()
         .map(|extension| extension.to_string_lossy().to_string())
         .unwrap_or_default();
-    let marked = replace_token(&replace_token(pattern.trim(), "name", NAME_MARK), "ext", EXT_MARK);
+    let marked = replace_token(
+        &replace_token(pattern.trim(), "name", NAME_MARK),
+        "ext",
+        EXT_MARK,
+    );
     let dated = expand_dates(&marked);
     let mut name = dated
         .replace(NAME_MARK, &stem)
@@ -901,8 +940,8 @@ fn expand_dates(text: &str) -> String {
 #[cfg(windows)]
 fn recycle(path: &Path) -> Result<(), String> {
     use windows::Win32::UI::Shell::{
-        FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT,
-        SHFILEOPSTRUCTW, SHFileOperationW,
+        FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, SHFILEOPSTRUCTW,
+        SHFileOperationW,
     };
     use windows::core::PCWSTR;
 
@@ -920,7 +959,9 @@ fn recycle(path: &Path) -> Result<(), String> {
     };
     let code = unsafe { SHFileOperationW(&mut operation) };
     if code != 0 || operation.fAnyOperationsAborted.as_bool() {
-        return Err(format!("Couldn't send it to the Recycle Bin (error {code})."));
+        return Err(format!(
+            "Couldn't send it to the Recycle Bin (error {code})."
+        ));
     }
     Ok(())
 }
@@ -939,7 +980,8 @@ fn load(folder: &str) -> Result<RulesFile, String> {
     if !path.is_file() {
         return Ok(RulesFile::default());
     }
-    let bytes = fs::read(&path).map_err(|error| format!("Couldn't read {}: {error}", path.display()))?;
+    let bytes =
+        fs::read(&path).map_err(|error| format!("Couldn't read {}: {error}", path.display()))?;
     let file: RulesFile = serde_json::from_slice(&bytes)
         .map_err(|error| format!("{} is not a valid rules file: {error}", path.display()))?;
     Ok(normalize(file))
@@ -1013,7 +1055,11 @@ fn normalize(mut file: RulesFile) -> RulesFile {
             let mut extensions = Vec::new();
             for extension in &rule.matcher.extensions {
                 for part in extension.split([',', ' ', ';']) {
-                    let clean = part.trim().trim_start_matches("*.").trim_start_matches('.').to_lowercase();
+                    let clean = part
+                        .trim()
+                        .trim_start_matches("*.")
+                        .trim_start_matches('.')
+                        .to_lowercase();
                     if !clean.is_empty() && !extensions.contains(&clean) {
                         extensions.push(clean);
                     }
@@ -1165,7 +1211,12 @@ mod tests {
             ..RuleMatch::default()
         });
         assert!(!matches(&old, &path, &metadata, now));
-        assert!(matches(&old, &path, &metadata, now + Duration::from_secs(4 * 86_400)));
+        assert!(matches(
+            &old,
+            &path,
+            &metadata,
+            now + Duration::from_secs(4 * 86_400)
+        ));
 
         let nothing = rule(RuleMatch::default());
         assert!(!matches(&nothing, &path, &metadata, now));

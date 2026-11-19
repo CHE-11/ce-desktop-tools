@@ -65,7 +65,9 @@ fn is_trivial(tokens: &[Token], text: &str) -> bool {
     }
     let lower = text.trim().to_ascii_lowercase();
     match tokens[0] {
-        Token::Number(_) => !["0x", "0b", "0o"].iter().any(|prefix| lower.starts_with(prefix)),
+        Token::Number(_) => !["0x", "0b", "0o"]
+            .iter()
+            .any(|prefix| lower.starts_with(prefix)),
         _ => true,
     }
 }
@@ -154,7 +156,10 @@ fn tokenize(text: &str) -> Option<Vec<Token>> {
                 index += 1;
             }
             tokens.push(Token::Ident(
-                chars[start..index].iter().collect::<String>().to_lowercase(),
+                chars[start..index]
+                    .iter()
+                    .collect::<String>()
+                    .to_lowercase(),
             ));
             continue;
         }
@@ -180,7 +185,9 @@ fn tokenize(text: &str) -> Option<Vec<Token>> {
 fn is_digit_group(chars: &[char], index: usize) -> bool {
     let before = index > 0 && chars[index - 1].is_ascii_digit();
     let after = chars.len() >= index + 4
-        && chars[index + 1..index + 4].iter().all(|ch| ch.is_ascii_digit())
+        && chars[index + 1..index + 4]
+            .iter()
+            .all(|ch| ch.is_ascii_digit())
         && chars.get(index + 4).is_none_or(|ch| !ch.is_ascii_digit());
     before && after
 }
@@ -261,7 +268,11 @@ impl Parser {
         while let Some(Token::Op(op @ ('+' | '-'))) = self.peek().cloned() {
             self.index += 1;
             let right = self.term()?;
-            value = if op == '+' { value + right } else { value - right };
+            value = if op == '+' {
+                value + right
+            } else {
+                value - right
+            };
         }
         Some(value)
     }
@@ -401,7 +412,9 @@ mod tests {
     use super::{evaluate, format_number};
 
     fn value(input: &str) -> String {
-        evaluate(input).map(|answer| answer.value).unwrap_or_default()
+        evaluate(input)
+            .map(|answer| answer.value)
+            .unwrap_or_default()
     }
 
     #[test]

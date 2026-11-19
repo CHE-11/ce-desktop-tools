@@ -13,6 +13,7 @@ import { TextExpansion } from "./components/Tools/TextExpansion";
 import { CommonMisspells } from "./components/Tools/CommonMisspells";
 import { DateExpander } from "./components/Tools/DateExpander";
 import { AsciiCodes } from "./components/Tools/AsciiCodes";
+import { UnitsConverter } from "./components/Tools/UnitsConverter";
 import { Clipboard } from "./components/Tools/Clipboard";
 import { KeyboardShortcuts } from "./components/Tools/KeyboardShortcuts";
 import { BatchRename } from "./components/Tools/BatchRename";
@@ -285,6 +286,7 @@ export function HomePage() {
           {tool === "misspell" ? <CommonMisspells onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "date" ? <DateExpander onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "ascii" ? <AsciiCodes onOpenSettings={() => setSettingsOpen(true)} /> : null}
+          {tool === "units" ? <UnitsConverter /> : null}
           {tool === "clipboard" ? (
             <Clipboard
               settingsFolder={expansion.settingsFolder}

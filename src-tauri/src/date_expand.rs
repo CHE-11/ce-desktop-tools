@@ -719,13 +719,19 @@ mod tests {
         );
         assert_eq!(expand_variables_at("{dd} {YY}", &when), "14 26");
         assert_eq!(expand_variables_at("{MMMM} {ddd}", &when), "November Sat");
-        assert_eq!(expand_variables_at("{HH}:{mm}:{ss} {tt}", &when), "20:34:05 PM");
+        assert_eq!(
+            expand_variables_at("{HH}:{mm}:{ss} {tt}", &when),
+            "20:34:05 PM"
+        );
         assert_eq!(expand_variables_at("{h:mm tt}", &when), "8:34 PM");
         assert_eq!(
             expand_variables_at("{longdate}", &when),
             "Saturday, November 14, 2026"
         );
-        assert_eq!(expand_variables_at("Call {hello} at 5", &when), "Call {hello} at 5");
+        assert_eq!(
+            expand_variables_at("Call {hello} at 5", &when),
+            "Call {hello} at 5"
+        );
         assert_eq!(expand_variables_at("Still {MM", &when), "Still {MM");
         assert_eq!(expand_variables_at("No tokens", &when), "No tokens");
     }
@@ -742,10 +748,7 @@ mod tests {
             super::expand_in("Hi {user} on {hostname}", &when, &vars),
             "Hi Ada on WORK"
         );
-        assert_eq!(
-            super::expand_in("[{clipboard}]", &when, &vars),
-            "[{MM}]"
-        );
+        assert_eq!(super::expand_in("[{clipboard}]", &when, &vars), "[{MM}]");
         assert_eq!(
             super::expand_in("a{cursor}b{caret}c", &when, &vars),
             format!("a{}b{}c", super::CURSOR, super::CURSOR)
