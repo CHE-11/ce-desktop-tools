@@ -1,8 +1,8 @@
 //! Folder rules.
 //!
 //! Each watched folder has an ordered list of rules. When a file lands in the
-//! folder, the first enabled rule that matches moves, copies, renames, or
-//! recycles it. Rules live in folder-rules.json beside the settings file.
+//! folder, the first enabled rule that matches runs its steps in order: move,
+//! copy, rename, or recycle. Rules live in folder-rules.json beside the settings file.
 //! The activity log stays in memory and is never written down.
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -23,6 +23,7 @@ const GIVE_UP: Duration = Duration::from_secs(5 * 60);
 const LOG_LIMIT: usize = 200;
 const MAX_FOLDERS: usize = 20;
 const MAX_RULES: usize = 50;
+const MAX_STEPS: usize = 8;
 const ACTIONS: &[&str] = &["move", "copy", "recycle", "rename"];
 const CONFLICTS: &[&str] = &["number", "skip", "overwrite"];
 const PARTIAL: &[&str] = &["crdownload", "part", "partial", "tmp", "download", "opdownload"];
@@ -51,6 +52,28 @@ impl RuleMatch {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+pub struct RuleStep {
+    pub id: String,
+    pub action: String,
+    pub target: String,
+    pub rename_pattern: String,
+    pub on_conflict: String,
+}
+
+impl Default for RuleStep {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            action: "move".into(),
+            target: String::new(),
+            rename_pattern: String::new(),
+            on_conflict: "number".into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct Rule {
     pub id: String,
     pub name: String,
@@ -58,9 +81,15 @@ pub struct Rule {
     pub enabled: bool,
     #[serde(rename = "match")]
     pub matcher: RuleMatch,
+    pub steps: Vec<RuleStep>,
+    /// Older files stored one action on the rule. Read on load, never written.
+    #[serde(default, skip_serializing)]
     pub action: String,
+    #[serde(default, skip_serializing)]
     pub target: String,
+    #[serde(default, skip_serializing)]
     pub rename_pattern: String,
+    #[serde(default, skip_serializing)]
     pub on_conflict: String,
 }
 
@@ -71,10 +100,11 @@ impl Default for Rule {
             name: String::new(),
             enabled: true,
             matcher: RuleMatch::default(),
-            action: "move".into(),
+            steps: Vec::new(),
+            action: String::new(),
             target: String::new(),
             rename_pattern: String::new(),
-            on_conflict: "number".into(),
+            on_conflict: String::new(),
         }
     }
 }
@@ -398,26 +428,23 @@ impl FolderRules {
             .iter()
             .find(|rule| rule.enabled && matches(rule, path, &metadata, SystemTime::now()))?;
         let file_name = display_name(path);
-        let result = plan_target(rule, path).and_then(|target| {
-            if dry_run {
-                return Ok(("planned".to_string(), target, "Preview only".to_string()));
-            }
-            apply(rule, path, target.as_deref())
-        });
-        let (outcome, to, detail) = match result {
-            Ok((outcome, target, detail)) => (
-                outcome,
-                target.map(|target| target.display().to_string()).unwrap_or_default(),
-                detail,
-            ),
-            Err(error) => ("error".into(), String::new(), error),
-        };
-        if outcome == "done" && !to.is_empty() {
-            if let Ok(mut produced) = self.inner.produced.lock() {
-                produced.insert(PathBuf::from(&to));
+        let chain = apply_chain(rule, path, dry_run);
+        if !chain.produced.is_empty()
+            && let Ok(mut produced) = self.inner.produced.lock()
+        {
+            for path in chain.produced {
+                produced.insert(path);
             }
         }
-        let record = entry(&folder.path, &file_name, &rule.name, &rule.action, &outcome, &to, &detail);
+        let record = entry(
+            &folder.path,
+            &file_name,
+            &rule.name,
+            &chain.action,
+            &chain.outcome,
+            &chain.to,
+            &chain.detail,
+        );
         if !dry_run {
             self.log(record.clone());
         }
@@ -589,13 +616,133 @@ fn wildcard(pattern: &str, text: &str) -> bool {
     p == pattern.len()
 }
 
+struct ChainOutcome {
+    produced: Vec<PathBuf>,
+    outcome: String,
+    to: String,
+    detail: String,
+    action: String,
+}
+
+/// Runs every step on one file. Move and rename hand the next step the new
+/// path. Copy leaves the original in place. Recycle ends the chain.
+fn apply_chain(rule: &Rule, start: &Path, dry_run: bool) -> ChainOutcome {
+    let action = rule
+        .steps
+        .iter()
+        .map(|step| step.action.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let fail = |produced: Vec<PathBuf>, to: String, detail: String| ChainOutcome {
+        produced,
+        outcome: "error".into(),
+        to,
+        detail,
+        action: action.clone(),
+    };
+    if rule.steps.is_empty() {
+        return fail(Vec::new(), String::new(), "This rule has no steps.".into());
+    }
+    let mut current = start.to_path_buf();
+    let mut produced = Vec::new();
+    let mut details = Vec::new();
+    let mut final_to = String::new();
+    let mut file_moved = false;
+    let mut saw_done = false;
+
+    for (index, step) in rule.steps.iter().enumerate() {
+        if step.action == "recycle" && index + 1 < rule.steps.len() {
+            return fail(
+                produced,
+                final_to,
+                "Send to Recycle Bin has to be the last step.".into(),
+            );
+        }
+        let planned = match plan_target(step, &current) {
+            Ok(target) => target,
+            Err(error) => return fail(produced, final_to, error),
+        };
+        if dry_run {
+            details.push(step_detail(&step.action));
+            remember_destination(step, planned, &mut current, &mut final_to, &mut file_moved);
+            continue;
+        }
+        match apply(step, &current, planned.as_deref()) {
+            Ok((step_outcome, step_to, detail)) => {
+                details.push(detail);
+                if step_outcome == "done" {
+                    saw_done = true;
+                    if step.action != "recycle"
+                        && let Some(target) = step_to.clone()
+                    {
+                        produced.push(target);
+                    }
+                }
+                remember_destination(step, step_to, &mut current, &mut final_to, &mut file_moved);
+            }
+            Err(error) => return fail(produced, final_to, error),
+        }
+    }
+
+    let outcome = if dry_run {
+        "planned"
+    } else if saw_done {
+        "done"
+    } else {
+        "skipped"
+    };
+    ChainOutcome {
+        produced: if dry_run { Vec::new() } else { produced },
+        outcome: outcome.into(),
+        to: final_to,
+        detail: details.join(", "),
+        action,
+    }
+}
+
+/// `to` is where the file itself ended up. A copy updates that only while the
+/// original has not moved. Recycle clears it.
+fn remember_destination(
+    step: &RuleStep,
+    target: Option<PathBuf>,
+    current: &mut PathBuf,
+    final_to: &mut String,
+    file_moved: &mut bool,
+) {
+    match step.action.as_str() {
+        "copy" => {
+            if !*file_moved && let Some(target) = target {
+                *final_to = target.display().to_string();
+            }
+        }
+        "recycle" => final_to.clear(),
+        _ => {
+            if let Some(target) = target {
+                *file_moved = true;
+                *final_to = target.display().to_string();
+                *current = target;
+            }
+        }
+    }
+}
+
+fn step_detail(action: &str) -> String {
+    match action {
+        "copy" => "Copied",
+        "rename" => "Renamed",
+        "recycle" => "Sent to the Recycle Bin",
+        _ => "Moved",
+    }
+    .into()
+}
+
 /// Where a file will go. `None` means it stays put (recycle).
-fn plan_target(rule: &Rule, path: &Path) -> Result<Option<PathBuf>, String> {
+fn plan_target(step: &RuleStep, path: &Path) -> Result<Option<PathBuf>, String> {
     let name = display_name(path);
-    let desired = match rule.action.as_str() {
-        "move" | "copy" => Path::new(&expand_dates(rule.target.trim())).join(&name),
+    let desired = match step.action.as_str() {
+        "move" | "copy" => Path::new(&expand_dates(step.target.trim())).join(&name),
         "rename" => {
-            let next = rename_to(&rule.rename_pattern, path);
+            let next = rename_to(&step.rename_pattern, path);
             if next.is_empty() || next == name {
                 return Err("The rename pattern gives the same name.".into());
             }
@@ -609,22 +756,30 @@ fn plan_target(rule: &Rule, path: &Path) -> Result<Option<PathBuf>, String> {
     if !desired.exists() {
         return Ok(Some(desired));
     }
-    match rule.on_conflict.as_str() {
+    match step.on_conflict.as_str() {
         "overwrite" => Ok(Some(desired)),
         "skip" => Err(format!("{} already exists.", display_name(&desired))),
         _ => Ok(Some(numbered(&desired))),
     }
 }
 
-fn apply(rule: &Rule, path: &Path, target: Option<&Path>) -> Result<(String, Option<PathBuf>, String), String> {
-    match (rule.action.as_str(), target) {
+fn apply(
+    step: &RuleStep,
+    path: &Path,
+    target: Option<&Path>,
+) -> Result<(String, Option<PathBuf>, String), String> {
+    match (step.action.as_str(), target) {
         ("recycle", _) => {
             recycle(path)?;
             Ok(("done".into(), None, "Sent to the Recycle Bin".into()))
         }
         ("copy", Some(target)) => {
             if already_copied(path, target) {
-                return Ok(("skipped".into(), Some(target.to_path_buf()), "Already copied".into()));
+                return Ok((
+                    "skipped".into(),
+                    Some(target.to_path_buf()),
+                    "Already copied".into(),
+                ));
             }
             ensure_parent(target)?;
             fs::copy(path, target).map_err(|error| format!("Couldn't copy: {error}"))?;
@@ -633,8 +788,8 @@ fn apply(rule: &Rule, path: &Path, target: Option<&Path>) -> Result<(String, Opt
         ("move" | "rename", Some(target)) => {
             ensure_parent(target)?;
             move_file(path, target)?;
-            let detail = if rule.action == "move" { "Moved" } else { "Renamed" };
-            Ok(("done".into(), Some(target.to_path_buf()), detail.into()))
+            let detail = step_detail(&step.action);
+            Ok(("done".into(), Some(target.to_path_buf()), detail))
         }
         _ => Err("This rule has nowhere to put the file.".into()),
     }
@@ -828,12 +983,33 @@ fn normalize(mut file: RulesFile) -> RulesFile {
                 rule_ids.insert(rule.id.clone());
             }
             rule.name = rule.name.trim().to_string();
-            if !ACTIONS.contains(&rule.action.as_str()) {
-                rule.action = "move".into();
+            if rule.steps.is_empty() {
+                rule.steps.push(RuleStep {
+                    action: rule.action.clone(),
+                    target: rule.target.clone(),
+                    rename_pattern: rule.rename_pattern.clone(),
+                    on_conflict: rule.on_conflict.clone(),
+                    ..RuleStep::default()
+                });
             }
-            if !CONFLICTS.contains(&rule.on_conflict.as_str()) {
-                rule.on_conflict = "number".into();
+            rule.steps.truncate(MAX_STEPS);
+            let mut step_ids = HashSet::new();
+            for step in &mut rule.steps {
+                if step.id.trim().is_empty() || !step_ids.insert(step.id.clone()) {
+                    step.id = fresh_id("step");
+                    step_ids.insert(step.id.clone());
+                }
+                if !ACTIONS.contains(&step.action.as_str()) {
+                    step.action = "move".into();
+                }
+                if !CONFLICTS.contains(&step.on_conflict.as_str()) {
+                    step.on_conflict = "number".into();
+                }
             }
+            rule.action.clear();
+            rule.target.clear();
+            rule.rename_pattern.clear();
+            rule.on_conflict.clear();
             let mut extensions = Vec::new();
             for extension in &rule.matcher.extensions {
                 for part in extension.split([',', ' ', ';']) {
@@ -855,6 +1031,21 @@ fn prepare(file: RulesFile) -> Result<RulesFile, String> {
     if file.folders.len() > MAX_FOLDERS {
         return Err(format!("Folder rules can watch {MAX_FOLDERS} folders."));
     }
+    for folder in &file.folders {
+        for rule in &folder.rules {
+            let label = if rule.name.is_empty() {
+                "A rule"
+            } else {
+                rule.name.as_str()
+            };
+            if rule.steps.is_empty() && rule.action.trim().is_empty() {
+                return Err(format!("{label} needs a then step."));
+            }
+            if rule.steps.len() > MAX_STEPS {
+                return Err(format!("{label} can have {MAX_STEPS} then steps."));
+            }
+        }
+    }
     let file = normalize(file);
     for folder in &file.folders {
         if folder.path.is_empty() {
@@ -864,21 +1055,39 @@ fn prepare(file: RulesFile) -> Result<RulesFile, String> {
             return Err(format!("Folder does not exist: {}", folder.path));
         }
         for rule in &folder.rules {
-            let label = if rule.name.is_empty() { "A rule" } else { rule.name.as_str() };
+            let label = if rule.name.is_empty() {
+                "A rule"
+            } else {
+                rule.name.as_str()
+            };
             if rule.matcher.is_empty() {
-                return Err(format!("{label} needs at least one condition, so it does not touch every file."));
+                return Err(format!(
+                    "{label} needs at least one condition, so it does not touch every file."
+                ));
             }
-            match rule.action.as_str() {
-                "move" | "copy" if rule.target.trim().is_empty() => {
-                    return Err(format!("{label} needs a destination folder."));
+            if rule.steps.is_empty() {
+                return Err(format!("{label} needs a then step."));
+            }
+            let mut recycled = false;
+            for step in &rule.steps {
+                if recycled {
+                    return Err(format!("{label} has a step after Send to Recycle Bin."));
                 }
-                "move" | "copy" if same_path(Path::new(rule.target.trim()), Path::new(&folder.path)) => {
-                    return Err(format!("{label} points back at the folder it watches."));
+                match step.action.as_str() {
+                    "move" | "copy" if step.target.trim().is_empty() => {
+                        return Err(format!("{label} needs a destination folder."));
+                    }
+                    "move" | "copy"
+                        if same_path(Path::new(step.target.trim()), Path::new(&folder.path)) =>
+                    {
+                        return Err(format!("{label} points back at the folder it watches."));
+                    }
+                    "rename" if step.rename_pattern.trim().is_empty() => {
+                        return Err(format!("{label} needs a rename pattern."));
+                    }
+                    "recycle" => recycled = true,
+                    _ => {}
                 }
-                "rename" if rule.rename_pattern.trim().is_empty() => {
-                    return Err(format!("{label} needs a rename pattern."));
-                }
-                _ => {}
             }
         }
     }
@@ -887,7 +1096,10 @@ fn prepare(file: RulesFile) -> Result<RulesFile, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Rule, RuleMatch, RulesFile, matches, normalize, numbered, rename_to, wildcard};
+    use super::{
+        Rule, RuleMatch, RuleStep, RulesFile, WatchedFolder, apply_chain, matches, normalize,
+        numbered, prepare, rename_to, wildcard,
+    };
     use std::path::Path;
     use std::time::{Duration, SystemTime};
 
@@ -907,7 +1119,10 @@ mod tests {
         Rule {
             name: "test".into(),
             matcher,
-            target: "C:\\Sorted".into(),
+            steps: vec![RuleStep {
+                target: "C:\\Sorted".into(),
+                ..RuleStep::default()
+            }],
             ..Rule::default()
         }
     }
@@ -999,8 +1214,112 @@ mod tests {
         assert!(!folder.id.is_empty());
         let rule = &folder.rules[0];
         assert!(rule.enabled);
-        assert_eq!(rule.action, "move");
-        assert_eq!(rule.on_conflict, "number");
+        assert_eq!(rule.steps.len(), 1);
+        assert_eq!(rule.steps[0].action, "move");
+        assert_eq!(rule.steps[0].on_conflict, "number");
+        assert!(rule.action.is_empty());
         assert_eq!(rule.matcher.extensions, vec!["pdf", "docx"]);
+        let saved = serde_json::to_value(rule).unwrap();
+        assert!(saved.get("action").is_none());
+        assert!(saved.get("steps").is_some());
+    }
+
+    #[test]
+    fn steps_already_on_a_rule_are_left_alone() {
+        let file: RulesFile = serde_json::from_str(
+            r#"{"folders":[{"path":"C:\\Downloads","rules":[{"name":"PDFs","action":"recycle","steps":[{"id":"step-1","action":"copy","target":"D:\\A","onConflict":"skip"}]}]}]}"#,
+        )
+        .unwrap();
+        let file = normalize(file);
+        let step = &file.folders[0].rules[0].steps[0];
+        assert_eq!(file.folders[0].rules[0].steps.len(), 1);
+        assert_eq!(step.id, "step-1");
+        assert_eq!(step.action, "copy");
+        assert_eq!(step.target, "D:\\A");
+        assert_eq!(step.on_conflict, "skip");
+    }
+
+    #[test]
+    fn steps_run_rename_then_move_and_copy_keeps_the_original() {
+        let source = temp_dir("chain-src");
+        let archive = temp_dir("chain-archive");
+        let dest = temp_dir("chain-dest");
+        let file = source.join("scan.PDF");
+        std::fs::write(&file, b"hello").unwrap();
+        let copy_then_move = Rule {
+            name: "chain".into(),
+            steps: vec![
+                RuleStep {
+                    action: "copy".into(),
+                    target: archive.display().to_string(),
+                    ..RuleStep::default()
+                },
+                RuleStep {
+                    action: "rename".into(),
+                    rename_pattern: "{name}-signed".into(),
+                    ..RuleStep::default()
+                },
+                RuleStep {
+                    action: "move".into(),
+                    target: dest.display().to_string(),
+                    ..RuleStep::default()
+                },
+            ],
+            ..Rule::default()
+        };
+        let preview = apply_chain(&copy_then_move, &file, true);
+        assert_eq!(preview.outcome, "planned");
+        assert_eq!(preview.detail, "Copied, Renamed, Moved");
+        assert!(preview.produced.is_empty());
+        assert!(file.is_file());
+
+        let chain = apply_chain(&copy_then_move, &file, false);
+        assert_eq!(chain.outcome, "done");
+        assert_eq!(chain.detail, "Copied, Renamed, Moved");
+        assert_eq!(chain.action, "copy, rename, move");
+        let copied = archive.join("scan.PDF");
+        let landed = dest.join("scan-signed.PDF");
+        assert!(copied.is_file());
+        assert!(landed.is_file());
+        assert!(!file.exists());
+        assert!(!source.join("scan-signed.PDF").exists());
+        assert_eq!(chain.to, landed.display().to_string());
+        let _ = std::fs::remove_dir_all(&source);
+        let _ = std::fs::remove_dir_all(&archive);
+        let _ = std::fs::remove_dir_all(&dest);
+    }
+
+    #[test]
+    fn recycle_has_to_be_the_last_step() {
+        let directory = temp_dir("prepare-recycle");
+        let file = RulesFile {
+            folders: vec![WatchedFolder {
+                path: directory.display().to_string(),
+                rules: vec![Rule {
+                    name: "Bad".into(),
+                    matcher: RuleMatch {
+                        extensions: vec!["pdf".into()],
+                        ..RuleMatch::default()
+                    },
+                    steps: vec![
+                        RuleStep {
+                            action: "recycle".into(),
+                            ..RuleStep::default()
+                        },
+                        RuleStep {
+                            action: "move".into(),
+                            target: directory.display().to_string(),
+                            ..RuleStep::default()
+                        },
+                    ],
+                    ..Rule::default()
+                }],
+                ..WatchedFolder::default()
+            }],
+            ..RulesFile::default()
+        };
+        let error = prepare(file).unwrap_err();
+        assert!(error.contains("Recycle Bin"), "{error}");
+        let _ = std::fs::remove_dir_all(&directory);
     }
 }

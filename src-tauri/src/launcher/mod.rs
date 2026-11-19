@@ -152,6 +152,11 @@ const TOOLS: &[Entry] = &[
         title: "Processes",
         keywords: "task manager kill port lock",
     },
+    Entry {
+        id: "file-tools",
+        title: "File Tools",
+        keywords: "pdf image cad convert",
+    },
 ];
 
 const ACTIONS: &[Entry] = &[

@@ -7,6 +7,7 @@ import type {
   FolderRuleAction,
   FolderRuleActivity,
   FolderRuleConflict,
+  FolderRuleStep,
   FolderRulesState,
   WatchedFolder,
 } from "../../../../types/folder-rules";
@@ -47,16 +48,23 @@ function newId(prefix: string) {
   return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+function newStep(): FolderRuleStep {
+  return {
+    id: newId("step"),
+    action: "move",
+    target: "",
+    renamePattern: "{name}",
+    onConflict: "number",
+  };
+}
+
 function newRule(): FolderRule {
   return {
     id: newId("rule"),
     name: "New rule",
     enabled: true,
     match: { extensions: [], nameContains: "", olderThanDays: 0, minSizeKb: 0 },
-    action: "move",
-    target: "",
-    renamePattern: "{name}",
-    onConflict: "number",
+    steps: [newStep()],
   };
 }
 
@@ -182,11 +190,14 @@ export function FolderRules({ onOpenSettings }: Props) {
     setSelectedId(folder.id);
   }
 
-  async function chooseTarget(ruleId: string) {
+  async function chooseTarget(ruleId: string, stepId: string) {
     const picked = await open({ multiple: false, directory: true, title: "Choose the destination folder" });
     const path = pickedFolderPath(picked);
     if (path) {
-      editRule(ruleId, (rule) => ({ ...rule, target: path }));
+      editRule(ruleId, (rule) => ({
+        ...rule,
+        steps: rule.steps.map((step) => (step.id === stepId ? { ...step, target: path } : step)),
+      }));
     }
   }
 
@@ -384,7 +395,7 @@ export function FolderRules({ onOpenSettings }: Props) {
                     onRemove={() =>
                       editSelected((folder) => ({ ...folder, rules: folder.rules.filter((each) => each.id !== rule.id) }))
                     }
-                    onBrowse={() => void chooseTarget(rule.id)}
+                    onBrowse={(stepId) => void chooseTarget(rule.id, stepId)}
                   />
                 ))}
                 <div id="folder-rules-add-rule-row">
@@ -419,7 +430,7 @@ type RuleEditorProps = {
   onChange: (change: (rule: FolderRule) => FolderRule) => void;
   onMove: (offset: number) => void;
   onRemove: () => void;
-  onBrowse: () => void;
+  onBrowse: (stepId: string) => void;
 };
 
 function RuleEditor({ rule, first, last, onChange, onMove, onRemove, onBrowse }: RuleEditorProps) {
@@ -443,7 +454,24 @@ function RuleEditor({ rule, first, last, onChange, onMove, onRemove, onBrowse }:
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   }
 
-  const needsTarget = rule.action === "move" || rule.action === "copy";
+  function editStep(stepId: string, change: (step: FolderRuleStep) => FolderRuleStep) {
+    onChange((current) => ({
+      ...current,
+      steps: current.steps.map((step) => (step.id === stepId ? change(step) : step)),
+    }));
+  }
+
+  function moveStep(index: number, offset: number) {
+    onChange((current) => {
+      const steps = [...current.steps];
+      const target = index + offset;
+      if (target < 0 || target >= steps.length) {
+        return current;
+      }
+      [steps[index], steps[target]] = [steps[target], steps[index]];
+      return { ...current, steps };
+    });
+  }
 
   return (
     <article id={base} className={cn("flex flex-col gap-3 rounded-lg border border-zinc-800 bg-zinc-900 p-3", !rule.enabled && "opacity-60")}>
@@ -530,74 +558,144 @@ function RuleEditor({ rule, first, last, onChange, onMove, onRemove, onBrowse }:
           />
         </label>
       </fieldset>
-      <fieldset id={`${base}-do`} className="flex flex-wrap items-end gap-x-4 gap-y-2">
-        <legend id={`${base}-do-legend`} className="mb-1 text-xs font-medium tracking-wide text-zinc-500 uppercase">
+      <fieldset id={`${base}-do`} className="flex flex-col gap-3">
+        <legend id={`${base}-do-legend`} className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
           Then
         </legend>
-        <label id={`${base}-action-label`} className="flex flex-col gap-1 text-xs text-zinc-400">
-          Action
-          <select
-            id={`${base}-action`}
-            value={rule.action}
-            onChange={(event) => onChange((current) => ({ ...current, action: event.target.value as FolderRuleAction }))}
-            className={INPUT}
+        {rule.steps.map((step, index) => {
+          const stepId = `${base}-step-${step.id}`;
+          const needsTarget = step.action === "move" || step.action === "copy";
+          return (
+            <div id={stepId} key={step.id} className={cn("flex flex-wrap items-end gap-x-4 gap-y-2", index > 0 && "border-t border-zinc-800 pt-3")}>
+              <label id={`${stepId}-action-label`} className="flex flex-col gap-1 text-xs text-zinc-400">
+                Action
+                <select
+                  id={`${stepId}-action`}
+                  value={step.action}
+                  onChange={(event) =>
+                    editStep(step.id, (current) => ({ ...current, action: event.target.value as FolderRuleAction }))
+                  }
+                  className={INPUT}
+                >
+                  {ACTIONS.map((action) => (
+                    <option id={`${stepId}-action-${action.id}`} key={action.id} value={action.id}>
+                      {action.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {needsTarget ? (
+                <label id={`${stepId}-target-label`} className="flex min-w-64 flex-1 flex-col gap-1 text-xs text-zinc-400">
+                  Destination ({"{yyyy}"} and other date pictures work)
+                  <span id={`${stepId}-target-row`} className="flex gap-2">
+                    <input
+                      id={`${stepId}-target`}
+                      value={step.target}
+                      placeholder="D:\Sorted\PDFs"
+                      onChange={(event) => editStep(step.id, (current) => ({ ...current, target: event.target.value }))}
+                      className={cn(INPUT, "min-w-0 flex-1")}
+                    />
+                    <Button id={`${stepId}-target-browse`} variant="outline" size="sm" className="h-8" onClick={() => onBrowse(step.id)}>
+                      Browse
+                    </Button>
+                  </span>
+                </label>
+              ) : null}
+              {step.action === "rename" ? (
+                <label id={`${stepId}-pattern-label`} className="flex min-w-64 flex-1 flex-col gap-1 text-xs text-zinc-400">
+                  New name ({"{name}"}, {"{ext}"}, {"{yyyy-MM-dd}"})
+                  <input
+                    id={`${stepId}-pattern`}
+                    value={step.renamePattern}
+                    placeholder="{yyyy-MM-dd} {name}"
+                    onChange={(event) => editStep(step.id, (current) => ({ ...current, renamePattern: event.target.value }))}
+                    className={INPUT}
+                  />
+                </label>
+              ) : null}
+              {step.action !== "recycle" ? (
+                <label id={`${stepId}-conflict-label`} className="flex flex-col gap-1 text-xs text-zinc-400">
+                  If the name is taken
+                  <select
+                    id={`${stepId}-conflict`}
+                    value={step.onConflict}
+                    onChange={(event) =>
+                      editStep(step.id, (current) => ({ ...current, onConflict: event.target.value as FolderRuleConflict }))
+                    }
+                    className={INPUT}
+                  >
+                    {CONFLICTS.map((conflict) => (
+                      <option id={`${stepId}-conflict-${conflict.id}`} key={conflict.id} value={conflict.id}>
+                        {conflict.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              <div id={`${stepId}-order`} className="flex gap-1">
+                <Button id={`${stepId}-up`} variant="ghost" size="xs" disabled={index === 0} title="Move step up" onClick={() => moveStep(index, -1)}>
+                  <ArrowUp id={`${stepId}-up-icon`} className="size-3.5" aria-hidden="true" />
+                </Button>
+                <Button
+                  id={`${stepId}-down`}
+                  variant="ghost"
+                  size="xs"
+                  disabled={index === rule.steps.length - 1}
+                  title="Move step down"
+                  onClick={() => moveStep(index, 1)}
+                >
+                  <ArrowDown id={`${stepId}-down-icon`} className="size-3.5" aria-hidden="true" />
+                </Button>
+                <Button
+                  id={`${stepId}-remove`}
+                  variant="ghost"
+                  size="xs"
+                  disabled={rule.steps.length === 1}
+                  title={rule.steps.length === 1 ? "A rule needs a then step" : "Remove step"}
+                  onClick={() => onChange((current) => ({ ...current, steps: current.steps.filter((each) => each.id !== step.id) }))}
+                >
+                  <Trash2 id={`${stepId}-remove-icon`} className="size-3.5" aria-hidden="true" />
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+        <div id={`${base}-add-step-row`}>
+          <Button
+            id={`${base}-add-step`}
+            variant="outline"
+            size="sm"
+            disabled={rule.steps.length >= 8}
+            title={rule.steps.length >= 8 ? "A rule can have 8 steps" : undefined}
+            onClick={() => onChange((current) => ({ ...current, steps: [...current.steps, newStep()] }))}
           >
-            {ACTIONS.map((action) => (
-              <option id={`${base}-action-${action.id}`} key={action.id} value={action.id}>
-                {action.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {needsTarget ? (
-          <label id={`${base}-target-label`} className="flex min-w-64 flex-1 flex-col gap-1 text-xs text-zinc-400">
-            Destination ({"{yyyy}"} and other date pictures work)
-            <span id={`${base}-target-row`} className="flex gap-2">
-              <input
-                id={`${base}-target`}
-                value={rule.target}
-                placeholder="D:\Sorted\PDFs"
-                onChange={(event) => onChange((current) => ({ ...current, target: event.target.value }))}
-                className={cn(INPUT, "min-w-0 flex-1")}
-              />
-              <Button id={`${base}-target-browse`} variant="outline" size="sm" className="h-8" onClick={onBrowse}>
-                Browse
-              </Button>
-            </span>
-          </label>
-        ) : null}
-        {rule.action === "rename" ? (
-          <label id={`${base}-pattern-label`} className="flex min-w-64 flex-1 flex-col gap-1 text-xs text-zinc-400">
-            New name ({"{name}"}, {"{ext}"}, {"{yyyy-MM-dd}"})
-            <input
-              id={`${base}-pattern`}
-              value={rule.renamePattern}
-              placeholder="{yyyy-MM-dd} {name}"
-              onChange={(event) => onChange((current) => ({ ...current, renamePattern: event.target.value }))}
-              className={INPUT}
-            />
-          </label>
-        ) : null}
-        {rule.action !== "recycle" ? (
-          <label id={`${base}-conflict-label`} className="flex flex-col gap-1 text-xs text-zinc-400">
-            If the name is taken
-            <select
-              id={`${base}-conflict`}
-              value={rule.onConflict}
-              onChange={(event) => onChange((current) => ({ ...current, onConflict: event.target.value as FolderRuleConflict }))}
-              className={INPUT}
-            >
-              {CONFLICTS.map((conflict) => (
-                <option id={`${base}-conflict-${conflict.id}`} key={conflict.id} value={conflict.id}>
-                  {conflict.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
+            <Plus id={`${base}-add-step-icon`} className="size-3.5" aria-hidden="true" />
+            Add then
+          </Button>
+        </div>
       </fieldset>
     </article>
   );
+}
+
+function resultOf(row: FolderRuleActivity) {
+  if (row.outcome === "error") {
+    return row.detail;
+  }
+  if (!row.to) {
+    return row.action === "recycle" || row.action.endsWith(", recycle") ? "Recycle Bin" : row.detail;
+  }
+  return row.to;
+}
+
+function activityDetail(row: FolderRuleActivity) {
+  if (row.outcome === "error") {
+    return row.detail;
+  }
+  if (row.to && row.detail) {
+    return `${row.detail} · ${baseName(row.to)}`;
+  }
+  return row.detail || (row.to ? baseName(row.to) : "");
 }
 
 function PreviewTable({ rows }: { rows: FolderRuleActivity[] }) {
@@ -627,9 +725,9 @@ function PreviewTable({ rows }: { rows: FolderRuleActivity[] }) {
                 <td
                   id={`folder-rules-preview-row-${index}-to`}
                   className={cn("truncate py-1", OUTCOME_STYLES[row.outcome])}
-                  title={row.to || row.detail}
+                  title={row.detail || row.to}
                 >
-                  {row.outcome === "error" ? row.detail : row.action === "recycle" ? "Recycle Bin" : row.to}
+                  {resultOf(row)}
                 </td>
               </tr>
             ))}
@@ -664,7 +762,7 @@ function ActivityLog({ rows }: { rows: FolderRuleActivity[] }) {
                 {row.file}
                 <span id={`folder-rules-activity-${index}-detail`} className="text-zinc-500">
                   {" "}
-                  · {row.rule} · {row.outcome === "error" ? row.detail : row.to ? baseName(row.to) : row.detail}
+                  · {row.rule} · {activityDetail(row)}
                 </span>
               </span>
             </li>

@@ -9,15 +9,20 @@ export type FolderRuleMatch = {
   minSizeKb: number;
 };
 
+export type FolderRuleStep = {
+  id: string;
+  action: FolderRuleAction;
+  target: string;
+  renamePattern: string;
+  onConflict: FolderRuleConflict;
+};
+
 export type FolderRule = {
   id: string;
   name: string;
   enabled: boolean;
   match: FolderRuleMatch;
-  action: FolderRuleAction;
-  target: string;
-  renamePattern: string;
-  onConflict: FolderRuleConflict;
+  steps: FolderRuleStep[];
 };
 
 export type WatchedFolder = {

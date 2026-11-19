@@ -5,6 +5,7 @@ import {
   Cat,
   Clipboard,
   FilePen,
+  Files,
   FolderSync,
   Keyboard,
   Lock,
@@ -32,6 +33,7 @@ const TOOL_ICONS: Record<ToolId, LucideIcon> = {
   launcher: Search,
   "folder-rules": FolderSync,
   processes: Activity,
+  "file-tools": Files,
 };
 
 const SIDEBAR_WIDTH_KEY = "ce-desktop-tools.sidebar-width";

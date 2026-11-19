@@ -20,6 +20,7 @@ import { Pantherbar } from "./components/Tools/Pantherbar";
 import { Launcher } from "./components/Tools/Launcher";
 import { FolderRules } from "./components/Tools/FolderRules";
 import { Processes } from "./components/Tools/Processes";
+import { FileTools } from "./components/Tools/FileTools";
 import { applyUserThemeCss, normalizeColorMode, normalizeTheme, publishAppearance } from "./lib/appearance";
 import { publishDensity } from "./lib/density";
 import { appSettings, themeCss } from "./lib/app-client";
@@ -303,6 +304,7 @@ export function HomePage() {
           {tool === "launcher" ? <Launcher /> : null}
           {tool === "folder-rules" ? <FolderRules onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "processes" ? <Processes /> : null}
+          {tool === "file-tools" ? <FileTools /> : null}
         </main>
       </div>
       <StatusBar
