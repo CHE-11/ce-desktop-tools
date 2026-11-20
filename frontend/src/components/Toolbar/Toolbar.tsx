@@ -26,8 +26,7 @@ export function Toolbar({ labels, enabled, pinned, canLock, onToggleExpansion, o
       <Button
         id="toolbar-launcher"
         variant="ghost"
-        size="sm"
-        className="flex flex-col justify-center items-center gap-0.5"
+        className="flex flex-col justify-center items-center gap-0.5 min-h-fit py-0.5"
         title="Open the launcher"
         onClick={() => void launcherShow()}
       >
@@ -39,7 +38,7 @@ export function Toolbar({ labels, enabled, pinned, canLock, onToggleExpansion, o
           </Kbd>
           <Kbd id="toolbar-launcher-space" aria-label="Space" className="size-5 min-w-[40px]">Space</Kbd>
         </div>
-        <p id="toolbar-launcher-label" className="text-[0.625rem] font-medium text-zinc-100 opacity-40">
+        <p id="toolbar-launcher-label" className="text-[0.6rem] font-medium text-zinc-100 opacity-40">
           Open Launcher
         </p>
       </Button>
