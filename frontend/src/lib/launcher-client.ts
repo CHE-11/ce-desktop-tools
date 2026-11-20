@@ -21,6 +21,10 @@ export function launcherHide() {
   return invoke<void>("launcher_hide");
 }
 
+export function launcherShow() {
+  return invoke<void>("launcher_show");
+}
+
 export function launcherRefreshApps() {
   return invoke<void>("launcher_refresh_apps");
 }

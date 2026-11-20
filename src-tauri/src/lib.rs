@@ -399,6 +399,11 @@ fn launcher_hide(launcher: tauri::State<'_, launcher::Launcher>) {
 }
 
 #[tauri::command]
+fn launcher_show(launcher: tauri::State<'_, launcher::Launcher>) {
+    launcher.show();
+}
+
+#[tauri::command]
 fn launcher_refresh_apps() {
     std::thread::spawn(launcher::apps::refresh);
 }
@@ -646,6 +651,7 @@ pub fn run() {
             launcher_query,
             launcher_run,
             launcher_hide,
+            launcher_show,
             launcher_refresh_apps,
             folder_rules_state,
             folder_rules_save,

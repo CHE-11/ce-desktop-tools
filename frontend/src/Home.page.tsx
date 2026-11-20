@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import type { AppSettings } from "../../types/app";
 import type { ExpansionState, Snippet } from "../../types/expansion";
 import { AppSidebar } from "./components/AppSidebar";
-import { CommandPalette, type CommandItem } from "./components/CommandPalette";
 import { SettingsDialog } from "./components/Dialogs/Settings/SettingsDialog";
 import { UpdateDialog } from "./components/Dialogs/UpdateDialog";
 import { StatusBar } from "./components/StatusBar";
@@ -29,7 +28,7 @@ import { appSettings, themeCss } from "./lib/app-client";
 import { useDevFeedback } from "./lib/dev-feedback";
 import { expansionState, lockVault, saveExpansions, setExpansionEnabled, unlockVault, createVaultPin } from "./lib/expansion-client";
 import { messageOf } from "./lib/message";
-import { isToolId, TOOLS, type ToolId } from "./lib/tools";
+import { isToolId, type ToolId } from "./lib/tools";
 import { publishToolbarLabels, readToolbarLabels } from "./lib/toolbar-labels";
 import { useAppUpdate } from "./lib/use-app-update";
 import { alwaysOnTop, setAlwaysOnTop } from "./lib/window-client";
@@ -61,7 +60,6 @@ export function HomePage() {
   const [tool, setTool] = useState<ToolId>("expansion");
   const [expansion, setExpansion] = useState<ExpansionState>(EMPTY_EXPANSION);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [commandsOpen, setCommandsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [snippetOpen, setSnippetOpen] = useState(false);
@@ -220,37 +218,6 @@ export function HomePage() {
     }
   }, [expansion.enabled]);
 
-  const commands: CommandItem[] = [
-    {
-      id: "toggle-expansion",
-      label: expansion.enabled ? "Pause expansion" : "Resume expansion",
-      group: "Tools",
-      keywords: "pause resume text",
-      run: () => void toggleExpansion(),
-    },
-    {
-      id: "open-settings",
-      label: "Settings",
-      group: "Settings",
-      keywords: "theme zoom",
-      run: () => setSettingsOpen(true),
-    },
-    {
-      id: "check-updates",
-      label: "Check for updates",
-      group: "Settings",
-      run: () => void updates.checkForUpdate(),
-    },
-    ...TOOLS.map(
-      (entry): CommandItem => ({
-        id: `open-${entry.id}`,
-        label: `Open ${entry.label}`,
-        group: "Tools",
-        run: () => setTool(entry.id),
-      }),
-    ),
-  ];
-
   useDevFeedback({
     tool,
     settingsFolder: expansion.settingsFolder,
@@ -262,7 +229,6 @@ export function HomePage() {
     dialogs: {
       settings: settingsOpen,
       snippet: snippetOpen,
-      commands: commandsOpen,
       update: updates.open,
     },
   });
@@ -337,7 +303,6 @@ export function HomePage() {
         updateVersion={updates.availableVersion}
         onUpdate={updates.showPending}
       />
-      <CommandPalette open={commandsOpen} commands={commands} onOpenChange={setCommandsOpen} />
       <SettingsDialog
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}

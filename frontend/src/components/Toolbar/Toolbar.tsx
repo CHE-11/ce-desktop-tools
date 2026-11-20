@@ -1,5 +1,7 @@
 import { Lock, Pause, Pin, Play, Settings } from "lucide-react";
+import { launcherShow } from "../../lib/launcher-client";
 import { Button } from "../Button";
+import { Kbd } from "../Kbd";
 import { StylesMenu } from "./StylesMenu";
 
 type ToolbarProps = {
@@ -21,6 +23,27 @@ export function Toolbar({ labels, enabled, pinned, canLock, onToggleExpansion, o
           ce-desktop-tools
         </p>
       </div>
+      <Button
+        id="toolbar-launcher"
+        variant="ghost"
+        size="sm"
+        className="flex flex-col justify-center items-center gap-0.5"
+        title="Open the launcher"
+        onClick={() => void launcherShow()}
+      >
+        <div className="flex items-center gap-1">
+          <Kbd id="toolbar-launcher-win" aria-label="Windows" className="size-5 min-w-[25px]">
+            <svg id="toolbar-launcher-win-icon" viewBox="0 0 16 16" className="size-3" aria-hidden="true">
+              <path fill="currentColor" d="M0 2.4 6.6 1.5v5.8H0zm7.3-1L16 0v7.3H7.3zM0 8.6h6.6v5.8L0 13.5zm7.3 0H16V16l-8.7-1.2z" />
+            </svg>
+          </Kbd>
+          <Kbd id="toolbar-launcher-space" aria-label="Space" className="size-5 min-w-[40px]">Space</Kbd>
+        </div>
+        <p id="toolbar-launcher-label" className="text-[0.625rem] font-medium text-zinc-100 opacity-40">
+          Open Launcher
+        </p>
+      </Button>
+
       <Button
         id="toolbar-expansion"
         variant={enabled ? "secondary" : "outline"}

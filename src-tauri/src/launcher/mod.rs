@@ -273,6 +273,10 @@ impl Launcher {
     pub fn hide(&self) {
         hide(&self.app);
     }
+
+    pub fn show(&self) {
+        show(&self.app);
+    }
 }
 
 pub fn query(text: &str) -> Vec<LauncherResult> {
