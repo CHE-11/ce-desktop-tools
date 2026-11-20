@@ -19,6 +19,7 @@ mod startup;
 mod taskbar;
 mod update;
 mod vault_crypto;
+mod window_pin;
 
 use std::sync::Arc;
 
@@ -82,6 +83,16 @@ fn patch_app_settings(
 #[tauri::command]
 fn theme_css(app: tauri::AppHandle) -> Result<String, String> {
     app_settings::theme_css(&app)
+}
+
+#[tauri::command]
+fn always_on_top(app: tauri::AppHandle) -> bool {
+    window_pin::current(&app)
+}
+
+#[tauri::command]
+fn set_always_on_top(app: tauri::AppHandle, on: bool) -> Result<bool, String> {
+    window_pin::set(&app, on)
 }
 
 #[tauri::command]
@@ -344,6 +355,14 @@ fn launcher_save(
 }
 
 #[tauri::command]
+fn calculator_eval(
+    expression: String,
+    previous: Vec<launcher::calculator::CalcRef>,
+) -> launcher::calculator::CalcResult {
+    launcher::calculator::evaluate(&expression, &previous)
+}
+
+#[tauri::command]
 fn units_query(text: String) -> launcher::units::UnitsAnswer {
     launcher::units::interpret(&text)
 }
@@ -458,6 +477,10 @@ pub fn run() {
     // be first so a later launch from the taskbar exits before it can add
     // another tray icon.
     tauri::Builder::default()
+        // Tao registers for raw input while a window is focused, and that
+        // registration stops Windows low-level hotkeys from receiving keys in
+        // this window. Filtering device events removes that registration.
+        .device_event_filter(tauri::DeviceEventFilter::Always)
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if args.iter().any(|arg| arg == "--background") {
                 return;
@@ -556,6 +579,7 @@ pub fn run() {
                     eprintln!("ce-desktop-tools startup setting was not applied: {error}");
                 }
             }
+            window_pin::install(app.handle());
             if let Some(window) = app.get_webview_window("main") {
                 if !startup::started_in_background() {
                     let _ = window.show();
@@ -577,6 +601,8 @@ pub fn run() {
             preview_app_settings,
             patch_app_settings,
             theme_css,
+            always_on_top,
+            set_always_on_top,
             app_release,
             app_executable,
             reveal_path,
@@ -614,6 +640,7 @@ pub fn run() {
             pantherbar_fit,
             launcher_state,
             launcher_save,
+            calculator_eval,
             units_query,
             units_catalog,
             launcher_query,
@@ -648,6 +675,47 @@ pub(crate) fn show_main(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
+        // A key typed in another app does not give this process the right to
+        // take focus. Attaching to the foreground thread is what lets a
+        // tray-hidden window actually open.
+        force_foreground(&window);
         let _ = window.set_focus();
+    }
+}
+
+/// Windows refuses focus to a background process unless it shares input
+/// with the window in front, so attach to that thread for the switch.
+pub(crate) fn force_foreground(window: &tauri::WebviewWindow) {
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+        use windows::Win32::UI::WindowsAndMessaging::{
+            BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SW_SHOW,
+            SetForegroundWindow, ShowWindow,
+        };
+        let Ok(raw) = window.hwnd() else {
+            return;
+        };
+        let target = HWND(raw.0);
+        let _ = ShowWindow(target, SW_SHOW);
+        let foreground = GetForegroundWindow();
+        let current = GetCurrentThreadId();
+        let other = if foreground.0.is_null() {
+            0
+        } else {
+            GetWindowThreadProcessId(foreground, None)
+        };
+        let attached =
+            other != 0 && other != current && AttachThreadInput(current, other, true).as_bool();
+        let _ = SetForegroundWindow(target);
+        let _ = BringWindowToTop(target);
+        if attached {
+            let _ = AttachThreadInput(current, other, false);
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = window;
     }
 }

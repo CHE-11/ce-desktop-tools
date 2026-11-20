@@ -730,7 +730,27 @@ fn name_prefix(text: &str, name: &str) -> Option<usize> {
         || rest.starts_with(|ch: char| {
             ch.is_whitespace()
                 || ch.is_ascii_digit()
-                || matches!(ch, '\'' | '"' | '′' | '″' | '’' | '”' | ',' | '.')
+                || matches!(
+                    ch,
+                    '\'' | '"'
+                        | '′'
+                        | '″'
+                        | '’'
+                        | '”'
+                        | ','
+                        | '.'
+                        | '+'
+                        | '-'
+                        | '*'
+                        | '/'
+                        | '%'
+                        | '^'
+                        | '!'
+                        | '('
+                        | ')'
+                        | '#'
+                        | '='
+                )
         });
     boundary.then_some(consumed)
 }
@@ -813,6 +833,107 @@ fn dimension_id(dimension: Dimension) -> &'static str {
         Data => "data",
         Temperature => "temperature",
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TakenQuantity {
+    pub base: f64,
+    pub dimension: &'static str,
+    pub symbol: &'static str,
+}
+
+/// A leading number, including `1/2` and `.5`. The length counts a leading space.
+pub(crate) fn take_number(text: &str) -> Option<(f64, usize)> {
+    let lead = text.len() - text.trim_start().len();
+    let (value, len) = read_amount(text.trim_start())?;
+    Some((value, lead + len))
+}
+
+/// One quantity, including a mixed length such as `5 ft 6 in`.
+/// Stops before `+`, `-`, or another operator so `5mm+10in` is two quantities.
+pub(crate) fn take_quantity(text: &str) -> Option<(TakenQuantity, usize)> {
+    let mut index = text.len() - text.trim_start().len();
+    let mut measures = Vec::new();
+    loop {
+        let slice = text.get(index..)?;
+        let lead = slice.len() - slice.trim_start().len();
+        let body = slice.trim_start();
+        let (amount, amount_len) = read_amount(body)?;
+        let after_amount_full = &body[amount_len..];
+        let after_amount = after_amount_full.trim_start();
+        let (unit, unit_len) = take_unit(after_amount)?;
+        if unit_len == 0 {
+            return None;
+        }
+        measures.push(Measure { amount, unit });
+        let body_start = index + lead;
+        let after_amount_start =
+            body_start + amount_len + (after_amount_full.len() - after_amount.len());
+        index = after_amount_start + unit_len;
+
+        let tail = text.get(index..)?;
+        let trimmed = tail.trim_start();
+        let mut next_index = index + (tail.len() - trimmed.len());
+        let punct = trimmed.trim_start_matches(|ch: char| matches!(ch, '.' | ','));
+        next_index += trimmed.len() - punct.len();
+        if let Some(after_and) = strip_and(text.get(next_index..)?) {
+            next_index = text.len() - after_and.len();
+        }
+        let next = text.get(next_index..)?.trim_start();
+        if next.is_empty() || is_joiner(next) || read_amount(next).is_none() {
+            break;
+        }
+        index = text.len() - next.len();
+    }
+    let first = measures.first()?;
+    let dimension = first.unit.dimension;
+    if measures
+        .iter()
+        .any(|measure| measure.unit.dimension != dimension)
+    {
+        return None;
+    }
+    let base: f64 = measures
+        .iter()
+        .map(|measure| to_base(measure.amount, measure.unit.scale))
+        .sum();
+    if !base.is_finite() {
+        return None;
+    }
+    Some((
+        TakenQuantity {
+            base,
+            dimension: dimension_id(dimension),
+            symbol: first.unit.symbol,
+        },
+        index,
+    ))
+}
+
+pub(crate) fn known_unit(name: &str) -> bool {
+    find_unit(name).is_some()
+}
+
+pub(crate) fn show_in_unit(
+    base: f64,
+    from_symbol: &str,
+    dimension: &str,
+    target_name: &str,
+) -> Result<(String, String), String> {
+    let unit = find_unit(target_name).ok_or_else(|| format!("Unknown unit \"{target_name}\"."))?;
+    if dimension_id(unit.dimension) != dimension {
+        return Err(format!("Can't convert {from_symbol} to {}.", unit.symbol));
+    }
+    let shown = format_scaled(base, unit.scale)
+        .ok_or_else(|| "That conversion is not a number.".to_string())?;
+    Ok((shown, unit.symbol.to_string()))
+}
+
+fn is_joiner(text: &str) -> bool {
+    matches!(
+        text.chars().next(),
+        Some('+' | '-' | '*' | '/' | '%' | '^' | '!' | ')' | '(' | '#' | '=')
+    )
 }
 
 fn dimension_label(dimension: Dimension) -> &'static str {

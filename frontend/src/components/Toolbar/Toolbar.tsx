@@ -1,17 +1,19 @@
-import { Lock, Pause, Play, Settings } from "lucide-react";
+import { Lock, Pause, Pin, Play, Settings } from "lucide-react";
 import { Button } from "../Button";
 import { StylesMenu } from "./StylesMenu";
 
 type ToolbarProps = {
   labels: boolean;
   enabled: boolean;
+  pinned: boolean;
   canLock: boolean;
   onToggleExpansion: () => void;
+  onTogglePin: () => void;
   onLock: () => void;
   onSettings: () => void;
 };
 
-export function Toolbar({ labels, enabled, canLock, onToggleExpansion, onLock, onSettings }: ToolbarProps) {
+export function Toolbar({ labels, enabled, pinned, canLock, onToggleExpansion, onTogglePin, onLock, onSettings }: ToolbarProps) {
   return (
     <header id="app-toolbar" className="flex h-12 shrink-0 items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-3">
       <div id="app-toolbar-title" className="mr-auto min-w-0">
@@ -41,6 +43,18 @@ export function Toolbar({ labels, enabled, canLock, onToggleExpansion, onLock, o
         </Button>
       ) : null}
       <StylesMenu labels={labels} />
+      <Button
+        id="toolbar-pin"
+        variant={pinned ? "outline" : "ghost"}
+        size="sm"
+        className={pinned ? "border-violet-500 bg-violet-950 text-violet-100 hover:bg-violet-900" : undefined}
+        title={pinned ? "Stop keeping this window on top" : "Keep this window on top"}
+        aria-pressed={pinned}
+        onClick={onTogglePin}
+      >
+        <Pin id="toolbar-pin-icon" className={pinned ? "size-4 text-violet-300" : "size-4"} aria-hidden="true" />
+        {labels ? <span id="toolbar-pin-label">On top</span> : null}
+      </Button>
       <Button id="toolbar-settings" variant="ghost" size="sm" title="Settings" onClick={onSettings}>
         <Settings id="toolbar-settings-icon" className="size-4" aria-hidden="true" />
         {labels ? <span id="toolbar-settings-label">Settings</span> : null}

@@ -14,6 +14,7 @@ import { CommonMisspells } from "./components/Tools/CommonMisspells";
 import { DateExpander } from "./components/Tools/DateExpander";
 import { AsciiCodes } from "./components/Tools/AsciiCodes";
 import { UnitsConverter } from "./components/Tools/UnitsConverter";
+import { Calculator } from "./components/Tools/Calculator";
 import { Clipboard } from "./components/Tools/Clipboard";
 import { KeyboardShortcuts } from "./components/Tools/KeyboardShortcuts";
 import { BatchRename } from "./components/Tools/BatchRename";
@@ -31,6 +32,7 @@ import { messageOf } from "./lib/message";
 import { isToolId, TOOLS, type ToolId } from "./lib/tools";
 import { publishToolbarLabels, readToolbarLabels } from "./lib/toolbar-labels";
 import { useAppUpdate } from "./lib/use-app-update";
+import { alwaysOnTop, setAlwaysOnTop } from "./lib/window-client";
 import { publishZoom } from "./lib/zoom";
 
 function keepUnlockedSnippets(current: ExpansionState, next: ExpansionState): ExpansionState {
@@ -64,6 +66,7 @@ export function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [snippetOpen, setSnippetOpen] = useState(false);
   const [labels, setLabels] = useState(readToolbarLabels);
+  const [pinned, setPinned] = useState(false);
   const [focusNonce, setFocusNonce] = useState(0);
 
   useEffect(() => {
@@ -127,6 +130,9 @@ export function HomePage() {
           setTool(event.payload);
         }
       }),
+      listen<boolean>("always-on-top", (event) => {
+        setPinned(event.payload);
+      }),
     ];
     return () => {
       void Promise.all(subscriptions).then((unlisten) => {
@@ -157,6 +163,12 @@ export function HomePage() {
     return () => {
       unlisten?.();
     };
+  }, []);
+
+  useEffect(() => {
+    void alwaysOnTop()
+      .then(setPinned)
+      .catch(() => undefined);
   }, []);
 
   const saveSnippets = useCallback(async (snippets: Snippet[]) => {
@@ -190,6 +202,14 @@ export function HomePage() {
       setBusy(false);
     }
   }, []);
+
+  const togglePinned = useCallback(async () => {
+    try {
+      setPinned(await setAlwaysOnTop(!pinned));
+    } catch (caught) {
+      setError(messageOf(caught));
+    }
+  }, [pinned]);
 
   const toggleExpansion = useCallback(async () => {
     try {
@@ -252,8 +272,10 @@ export function HomePage() {
       <Toolbar
         labels={labels}
         enabled={expansion.enabled}
+        pinned={pinned}
         canLock={expansion.settingsFolder.length > 0 && !expansion.locked}
         onToggleExpansion={() => void toggleExpansion()}
+        onTogglePin={() => void togglePinned()}
         onLock={() => void lock()}
         onSettings={() => setSettingsOpen(true)}
       />
@@ -287,6 +309,7 @@ export function HomePage() {
           {tool === "date" ? <DateExpander onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "ascii" ? <AsciiCodes onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "units" ? <UnitsConverter /> : null}
+          {tool === "calculator" ? <Calculator /> : null}
           {tool === "clipboard" ? (
             <Clipboard
               settingsFolder={expansion.settingsFolder}
@@ -336,6 +359,9 @@ export function HomePage() {
         onClose={updates.dismiss}
         onInstall={() => void updates.install()}
       />
+      {pinned ? (
+        <div id="always-on-top-border" className="pointer-events-none fixed inset-0 z-[70] border-[3px] border-[#a855f7]" />
+      ) : null}
     </div>
   );
 }

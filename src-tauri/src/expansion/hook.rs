@@ -7,9 +7,9 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 
 use crate::expansion::matcher::{ExpansionHit, Matcher, Snippet};
 
@@ -18,6 +18,8 @@ pub struct Pending {
     pub text: String,
     pub ending: Option<char>,
     pub timed: bool,
+    /// Delete the trigger, then open the window so the vault can be unlocked.
+    pub unlock: bool,
 }
 
 pub struct HookState {
@@ -57,12 +59,19 @@ impl HookState {
         let Some(app) = self.app.lock().ok().and_then(|slot| slot.clone()) else {
             return;
         };
-        let _ = app.emit("expansion-unlock-request", ());
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.unminimize();
-            let _ = window.show();
-            let _ = window.set_focus();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_millis() as u64)
+            .unwrap_or(0);
+        let previous = self.last_notice.load(Ordering::Relaxed);
+        if now.saturating_sub(previous) < 1500 {
+            return;
         }
+        self.last_notice.store(now, Ordering::Relaxed);
+        // Show first so the pin field is focused in a window that is already open,
+        // including one that was only sitting in the tray.
+        crate::show_main(&app);
+        let _ = app.emit("expansion-unlock-request", ());
     }
 
     pub fn replace_snippets(&self, snippets: Vec<Snippet>) {
@@ -135,10 +144,6 @@ fn run(state: Arc<HookState>) {
                 perform_pending(&state);
                 continue;
             }
-            if message.message == WM_APP + 2 {
-                state.prompt_unlock();
-                continue;
-            }
             let _ = TranslateMessage(&message);
             DispatchMessageW(&message);
         }
@@ -152,6 +157,7 @@ fn perform_pending(state: &HookState) {
     let Some(pending) = pending else {
         return;
     };
+    let unlock = pending.unlock;
     let mut text = if pending.timed {
         crate::date_expand::render_now(&pending.text)
     } else {
@@ -161,6 +167,12 @@ fn perform_pending(state: &HookState) {
         text.push(ch);
     }
     inject(pending.backspaces, &text);
+    if unlock {
+        // The backspaces are still in the other app's queue. Opening now would
+        // take focus first and delete the trigger in this window instead.
+        std::thread::sleep(Duration::from_millis(60));
+        state.prompt_unlock();
+    }
 }
 
 #[cfg(windows)]
@@ -247,8 +259,8 @@ fn on_key(info: &windows::Win32::UI::WindowsAndMessaging::KBDLLHOOKSTRUCT) -> bo
     };
     if hit.secret {
         matcher.clear();
-        request_unlock(state);
-        return false;
+        schedule_unlock(state, &hit);
+        return true;
     }
     schedule(state, &hit);
     matcher.clear();
@@ -256,45 +268,56 @@ fn on_key(info: &windows::Win32::UI::WindowsAndMessaging::KBDLLHOOKSTRUCT) -> bo
 }
 
 #[cfg(windows)]
-fn request_unlock(state: &HookState) {
-    use windows::Win32::Foundation::{LPARAM, WPARAM};
-    use windows::Win32::System::Threading::GetCurrentThreadId;
-    use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_APP};
-
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(0);
-    let previous = state.last_notice.load(Ordering::Relaxed);
-    if now.saturating_sub(previous) < 1500 {
+fn schedule_unlock(state: &HookState, hit: &ExpansionHit) {
+    if let Ok(mut pending) = state.pending.lock() {
+        *pending = Some(Pending {
+            backspaces: clear_count(&hit.trigger, hit.ending.is_some()),
+            text: String::new(),
+            ending: None,
+            timed: false,
+            unlock: true,
+        });
+    } else {
         return;
     }
-    state.last_notice.store(now, Ordering::Relaxed);
-    unsafe {
-        let _ = PostThreadMessageW(GetCurrentThreadId(), WM_APP + 2, WPARAM(0), LPARAM(0));
-    }
+    post_pending();
 }
 
 #[cfg(windows)]
 fn schedule(state: &HookState, hit: &ExpansionHit) {
-    use windows::Win32::Foundation::{LPARAM, WPARAM};
-    use windows::Win32::System::Threading::GetCurrentThreadId;
-    use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_APP};
-
-    let backspaces = match hit.ending {
-        Some(_) => hit.trigger.chars().count(),
-        None => hit.trigger.chars().count().saturating_sub(1),
-    };
+    let backspaces = clear_count(&hit.trigger, hit.ending.is_some());
     if let Ok(mut pending) = state.pending.lock() {
         *pending = Some(Pending {
             backspaces,
             text: hit.text.clone(),
             ending: hit.ending,
             timed: hit.timed,
+            unlock: false,
         });
     }
+    post_pending();
+}
+
+#[cfg(windows)]
+fn post_pending() {
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::System::Threading::GetCurrentThreadId;
+    use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_APP};
+
     unsafe {
         let _ = PostThreadMessageW(GetCurrentThreadId(), WM_APP + 1, WPARAM(0), LPARAM(0));
+    }
+}
+
+/// Characters of a locked trigger already on screen. The completing key is
+/// swallowed, so it is not counted unless it was only an ending character.
+#[cfg(windows)]
+fn clear_count(trigger: &str, ended: bool) -> usize {
+    let count = trigger.chars().count();
+    if ended {
+        count
+    } else {
+        count.saturating_sub(1)
     }
 }
 
@@ -603,7 +626,14 @@ fn inject(backspaces: usize, text: &str) {
 
 #[cfg(all(test, windows))]
 mod tests {
-    use super::{ascii_from_vk, boundary_char};
+    use super::{ascii_from_vk, boundary_char, clear_count};
+
+    #[test]
+    fn a_locked_trigger_is_cleared_before_the_window_opens() {
+        assert_eq!(clear_count(":lock", false), 4);
+        assert_eq!(clear_count(":lock", true), 5);
+        assert_eq!(clear_count("a", false), 0);
+    }
 
     #[test]
     fn space_ends_a_word_without_asking_the_layout() {
