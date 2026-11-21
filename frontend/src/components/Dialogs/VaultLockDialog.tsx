@@ -16,7 +16,7 @@ type VaultLockDialogProps = {
 export function VaultLockDialog({ open, onClose, locked, needsPin, busy, focusNonce, onCreatePin, onUnlock, onLock }: VaultLockDialogProps) {
   return (
     <Dialog id="vault-lock-dialog" title="Unlock the vault" open={open} onClose={onClose} panelClassName="max-w-lg">
-      <p id="vault-lock-dialog-description" className="text-sm text-zinc-400">
+      <p id="vault-lock-dialog-description" className="text-sm text-zinc-400 mb-2">
         Enter the password to unlock the vault.
       </p>  
       <VaultLock

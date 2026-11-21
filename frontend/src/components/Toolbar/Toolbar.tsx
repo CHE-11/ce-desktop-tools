@@ -63,14 +63,14 @@ export function Toolbar({ labels, enabled, pinned, canLock, onToggleExpansion, o
       </Button>
 
       {canLock ? (
-        <Button id="toolbar-lock" variant="ghost" size="sm" title="Lock the vault" onClick={onLock}>
-          <Lock id="toolbar-lock-icon" className="size-4" aria-hidden="true" />
-          {labels ? <span id="toolbar-lock-label">Lock</span> : null}
+        <Button id="toolbar-lock" variant="ghost" size="sm" title="Unlock the vault" onClick={onLock}>  
+          <Unlock id="toolbar-unlock-icon" className="size-4 text-emerald-400" aria-hidden="true" />
+          {labels ? <span id="toolbar-unlock-label" className="text-emerald-400">Lock Vault</span> : null}
         </Button>
       ) : (
-        <Button id="toolbar-lock" variant="ghost" size="sm" title="Unlock the vault" onClick={onUnlock}>  
-          <Unlock id="toolbar-unlock-icon" className="size-4" aria-hidden="true" />
-          {labels ? <span id="toolbar-unlock-label">Unlock</span> : null}
+        <Button id="toolbar-lock" variant="ghost" size="sm" title="Lock the vault" onClick={onUnlock}>
+          <Lock id="toolbar-lock-icon" className="size-4 text-red-400" aria-hidden="true" />
+          {labels ? <span id="toolbar-lock-label" className="text-zinc-100">Unlock Vault</span> : null}
         </Button>
       )}
   

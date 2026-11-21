@@ -488,7 +488,7 @@ dependencies = [
 
 [[package]]
 name = "ce-desktop-tools"
-version = "1.0.16"
+version = "1.0.19"
 dependencies = [
  "aes-gcm",
  "argon2",
