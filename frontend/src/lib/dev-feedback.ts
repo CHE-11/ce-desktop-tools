@@ -10,7 +10,6 @@ const MESSAGE_LIMIT = 2000;
 export type DevDialogs = {
   settings: boolean;
   snippet: boolean;
-  commands: boolean;
   update: boolean;
 };
 

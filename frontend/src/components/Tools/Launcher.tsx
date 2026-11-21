@@ -8,7 +8,8 @@ import { Button } from "../Button";
 const EXAMPLES = [
   { id: "app", query: "chrome", detail: "Opens a Start menu app or Store app." },
   { id: "tool", query: "folder rules", detail: "Opens a tool in this window." },
-  { id: "calc", query: "(1200 * 1.08) / 12", detail: "Calculates. Enter copies the answer." },
+  { id: "calc", query: "(1200 * 1.08) / 12", detail: "Calculates. Enter saves the line." },
+  { id: "ref", query: "#1 + 2, ans * 2", detail: "Reuses an earlier result. Enter on #n inserts it." },
   { id: "power", query: "2^10, sqrt(2), 5!", detail: "Powers, functions, and factorials." },
   { id: "base", query: "255 to hex", detail: "Converts between hex, binary, octal, and decimal." },
   { id: "unit", query: "5 km to mi", detail: "Length, mass, volume, area, speed, time, data, and temperature." },

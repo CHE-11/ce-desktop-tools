@@ -400,7 +400,39 @@ fn function(name: &str) -> Option<fn(f64) -> f64> {
     })
 }
 
-fn factorial(value: f64) -> Option<f64> {
+pub(crate) fn is_named_base(name: &str) -> bool {
+    matches!(
+        name.trim().to_ascii_lowercase().as_str(),
+        "hex" | "hexadecimal" | "bin" | "binary" | "oct" | "octal" | "dec" | "decimal"
+    )
+}
+
+pub(crate) fn format_named_base(value: f64, name: &str) -> Option<String> {
+    let base = match name.trim().to_ascii_lowercase().as_str() {
+        "hex" | "hexadecimal" => Base::Hex,
+        "bin" | "binary" => Base::Bin,
+        "oct" | "octal" => Base::Oct,
+        "dec" | "decimal" => Base::Dec,
+        _ => return None,
+    };
+    in_base(value, base)
+}
+
+pub(crate) fn named_constant(name: &str) -> Option<f64> {
+    constant(&name.to_ascii_lowercase())
+}
+
+pub(crate) fn named_function(name: &str) -> bool {
+    function(&name.to_ascii_lowercase()).is_some()
+}
+
+pub(crate) fn apply_function(name: &str, value: f64) -> Option<f64> {
+    let function = function(&name.to_ascii_lowercase())?;
+    let out = function(value);
+    out.is_finite().then_some(out)
+}
+
+pub(crate) fn factorial(value: f64) -> Option<f64> {
     if value < 0.0 || value.fract() != 0.0 || value > 170.0 {
         return None;
     }

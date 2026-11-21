@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import type { AppSettings } from "../../types/app";
 import type { ExpansionState, Snippet } from "../../types/expansion";
 import { AppSidebar } from "./components/AppSidebar";
-import { CommandPalette, type CommandItem } from "./components/CommandPalette";
 import { SettingsDialog } from "./components/Dialogs/Settings/SettingsDialog";
 import { UpdateDialog } from "./components/Dialogs/UpdateDialog";
 import { StatusBar } from "./components/StatusBar";
@@ -14,6 +13,7 @@ import { CommonMisspells } from "./components/Tools/CommonMisspells";
 import { DateExpander } from "./components/Tools/DateExpander";
 import { AsciiCodes } from "./components/Tools/AsciiCodes";
 import { UnitsConverter } from "./components/Tools/UnitsConverter";
+import { Calculator } from "./components/Tools/Calculator";
 import { Clipboard } from "./components/Tools/Clipboard";
 import { KeyboardShortcuts } from "./components/Tools/KeyboardShortcuts";
 import { BatchRename } from "./components/Tools/BatchRename";
@@ -28,9 +28,10 @@ import { appSettings, themeCss } from "./lib/app-client";
 import { useDevFeedback } from "./lib/dev-feedback";
 import { expansionState, lockVault, saveExpansions, setExpansionEnabled, unlockVault, createVaultPin } from "./lib/expansion-client";
 import { messageOf } from "./lib/message";
-import { isToolId, TOOLS, type ToolId } from "./lib/tools";
+import { isToolId, type ToolId } from "./lib/tools";
 import { publishToolbarLabels, readToolbarLabels } from "./lib/toolbar-labels";
 import { useAppUpdate } from "./lib/use-app-update";
+import { alwaysOnTop, setAlwaysOnTop } from "./lib/window-client";
 import { publishZoom } from "./lib/zoom";
 import { VaultLockDialog } from "./components/Dialogs/VaultLockDialog";
 
@@ -60,11 +61,11 @@ export function HomePage() {
   const [tool, setTool] = useState<ToolId>("expansion");
   const [expansion, setExpansion] = useState<ExpansionState>(EMPTY_EXPANSION);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [commandsOpen, setCommandsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [snippetOpen, setSnippetOpen] = useState(false);
   const [labels, setLabels] = useState(readToolbarLabels);
+  const [pinned, setPinned] = useState(false);
   const [focusNonce, setFocusNonce] = useState(0);
 
   const [showVaultLockDialog, setShowVaultLockDialog] = useState(false);
@@ -130,6 +131,9 @@ export function HomePage() {
           setTool(event.payload);
         }
       }),
+      listen<boolean>("always-on-top", (event) => {
+        setPinned(event.payload);
+      }),
     ];
     return () => {
       void Promise.all(subscriptions).then((unlisten) => {
@@ -160,6 +164,12 @@ export function HomePage() {
     return () => {
       unlisten?.();
     };
+  }, []);
+
+  useEffect(() => {
+    void alwaysOnTop()
+      .then(setPinned)
+      .catch(() => undefined);
   }, []);
 
   const saveSnippets = useCallback(async (snippets: Snippet[]) => {
@@ -194,6 +204,14 @@ export function HomePage() {
     }
   }, []);
 
+  const togglePinned = useCallback(async () => {
+    try {
+      setPinned(await setAlwaysOnTop(!pinned));
+    } catch (caught) {
+      setError(messageOf(caught));
+    }
+  }, [pinned]);
+
   const toggleExpansion = useCallback(async () => {
     try {
       const enabled = await setExpansionEnabled(!expansion.enabled);
@@ -202,37 +220,6 @@ export function HomePage() {
       setError(messageOf(caught));
     }
   }, [expansion.enabled]);
-
-  const commands: CommandItem[] = [
-    {
-      id: "toggle-expansion",
-      label: expansion.enabled ? "Pause expansion" : "Resume expansion",
-      group: "Tools",
-      keywords: "pause resume text",
-      run: () => void toggleExpansion(),
-    },
-    {
-      id: "open-settings",
-      label: "Settings",
-      group: "Settings",
-      keywords: "theme zoom",
-      run: () => setSettingsOpen(true),
-    },
-    {
-      id: "check-updates",
-      label: "Check for updates",
-      group: "Settings",
-      run: () => void updates.checkForUpdate(),
-    },
-    ...TOOLS.map(
-      (entry): CommandItem => ({
-        id: `open-${entry.id}`,
-        label: `Open ${entry.label}`,
-        group: "Tools",
-        run: () => setTool(entry.id),
-      }),
-    ),
-  ];
 
   useDevFeedback({
     tool,
@@ -245,7 +232,6 @@ export function HomePage() {
     dialogs: {
       settings: settingsOpen,
       snippet: snippetOpen,
-      commands: commandsOpen,
       update: updates.open,
     },
   });
@@ -255,9 +241,11 @@ export function HomePage() {
       <Toolbar
         labels={labels}
         enabled={expansion.enabled}
+        pinned={pinned}
         canLock={expansion.settingsFolder.length > 0 && !expansion.locked}
         onToggleExpansion={() => void toggleExpansion()}
         onUnlock={() => setShowVaultLockDialog(true)}
+        onTogglePin={() => void togglePinned()}
         onLock={() => void lock()}
         onSettings={() => setSettingsOpen(true)}
       />
@@ -291,6 +279,7 @@ export function HomePage() {
           {tool === "date" ? <DateExpander onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "ascii" ? <AsciiCodes onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "units" ? <UnitsConverter /> : null}
+          {tool === "calculator" ? <Calculator /> : null}
           {tool === "clipboard" ? (
             <Clipboard
               settingsFolder={expansion.settingsFolder}
@@ -318,7 +307,6 @@ export function HomePage() {
         updateVersion={updates.availableVersion}
         onUpdate={updates.showPending}
       />
-      <CommandPalette open={commandsOpen} commands={commands} onOpenChange={setCommandsOpen} />
       <SettingsDialog
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -340,7 +328,6 @@ export function HomePage() {
         onClose={updates.dismiss}
         onInstall={() => void updates.install()}
       />
-
       <VaultLockDialog
         open={showVaultLockDialog}
         onClose={() => setShowVaultLockDialog(false)}
@@ -358,7 +345,9 @@ export function HomePage() {
         }}
         onLock={lock}
       />
-
+      {pinned ? (
+        <div id="always-on-top-border" className="pointer-events-none fixed inset-0 z-[70] border-[3px] border-[#a855f7]" />
+      ) : null}
     </div>
   );
 }

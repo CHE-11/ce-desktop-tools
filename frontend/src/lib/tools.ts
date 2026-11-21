@@ -5,6 +5,7 @@ export const TOOLS = [
   { id: "date", label: "Date expander", lockable: false },
   { id: "ascii", label: "ASCII codes", lockable: false },
   { id: "units", label: "Units", lockable: false },
+  { id: "calculator", label: "Calculator", lockable: false },
   { id: "app-shortcuts", label: "Keyboard Shortcuts", lockable: false },
   { id: "rename", label: "Batch rename", lockable: false },
   { id: "pantherbar", label: "Pantherbar", lockable: false },

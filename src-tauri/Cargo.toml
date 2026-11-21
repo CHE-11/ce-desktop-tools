@@ -1,6 +1,6 @@
 [package]
 name = "ce-desktop-tools"
-version = "1.0.14"
+version = "1.0.15"
 description = "Windows desktop tools"
 authors = ["you"]
 edition = "2024"
@@ -34,6 +34,7 @@ winreg = "0.55"
 windows = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Globalization",
+  "Win32_Graphics_Dwm",
   "Win32_Graphics_Gdi",
   "Win32_NetworkManagement_IpHelper",
   "Win32_Networking_WinSock",

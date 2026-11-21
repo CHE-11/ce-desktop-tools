@@ -6,6 +6,7 @@
 
 pub mod apps;
 pub mod calc;
+pub mod calculator;
 mod fuzzy;
 mod hook;
 pub mod units;
@@ -126,6 +127,11 @@ const TOOLS: &[Entry] = &[
         id: "units",
         title: "Units",
         keywords: "convert units calculate math",
+    },
+    Entry {
+        id: "calculator",
+        title: "Calculator",
+        keywords: "calculate math tape units",
     },
     Entry {
         id: "app-shortcuts",
@@ -266,6 +272,10 @@ impl Launcher {
 
     pub fn hide(&self) {
         hide(&self.app);
+    }
+
+    pub fn show(&self) {
+        show(&self.app);
     }
 }
 
@@ -563,7 +573,7 @@ pub fn show(app: &AppHandle) {
     VISIBLE.store(true, Ordering::SeqCst);
     let _ = app.emit_to(WINDOW_LABEL, "launcher-show", ());
     let _ = window.show();
-    force_foreground(&window);
+    crate::force_foreground(&window);
     let _ = window.set_focus();
 }
 
@@ -626,41 +636,6 @@ fn place(window: &tauri::WebviewWindow) {
     #[cfg(not(windows))]
     {
         let _ = window.center();
-    }
-}
-
-/// Windows refuses focus to a background process unless it shares input
-/// with the window in front, so attach to that thread for the switch.
-fn force_foreground(window: &tauri::WebviewWindow) {
-    #[cfg(windows)]
-    unsafe {
-        use windows::Win32::Foundation::HWND;
-        use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
-        use windows::Win32::UI::WindowsAndMessaging::{
-            BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
-        };
-        let Ok(raw) = window.hwnd() else {
-            return;
-        };
-        let target = HWND(raw.0);
-        let foreground = GetForegroundWindow();
-        let current = GetCurrentThreadId();
-        let other = if foreground.0.is_null() {
-            0
-        } else {
-            GetWindowThreadProcessId(foreground, None)
-        };
-        let attached =
-            other != 0 && other != current && AttachThreadInput(current, other, true).as_bool();
-        let _ = SetForegroundWindow(target);
-        let _ = BringWindowToTop(target);
-        if attached {
-            let _ = AttachThreadInput(current, other, false);
-        }
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = window;
     }
 }
 
