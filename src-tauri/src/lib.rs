@@ -3,6 +3,7 @@ mod app_shortcuts;
 mod ascii;
 mod clipboard;
 mod date_expand;
+mod desktop_apps;
 mod dev_feedback;
 mod excel;
 mod expansion;
@@ -409,6 +410,20 @@ fn launcher_refresh_apps() {
 }
 
 #[tauri::command]
+async fn desktop_apps() -> Result<Vec<desktop_apps::DesktopApp>, String> {
+    tauri::async_runtime::spawn_blocking(desktop_apps::list)
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn desktop_app_add(name: String, app_id: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || desktop_apps::add(&name, &app_id))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 fn folder_rules_state(
     rules: tauri::State<'_, folder_rules::FolderRules>,
 ) -> folder_rules::FolderRulesState {
@@ -653,6 +668,8 @@ pub fn run() {
             launcher_hide,
             launcher_show,
             launcher_refresh_apps,
+            desktop_apps,
+            desktop_app_add,
             folder_rules_state,
             folder_rules_save,
             folder_rules_run,

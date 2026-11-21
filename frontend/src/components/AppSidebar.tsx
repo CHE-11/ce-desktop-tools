@@ -10,6 +10,7 @@ import {
   Files,
   FolderSync,
   Keyboard,
+  MonitorDown,
   Lock,
   Search,
   SpellCheck,
@@ -38,6 +39,7 @@ const TOOL_ICONS: Record<ToolId, LucideIcon> = {
   "folder-rules": FolderSync,
   processes: Activity,
   "file-tools": Files,
+  "add-to-desktop": MonitorDown,
 };
 
 const SIDEBAR_WIDTH_KEY = "ce-desktop-tools.sidebar-width";

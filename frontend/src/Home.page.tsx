@@ -22,6 +22,7 @@ import { Launcher } from "./components/Tools/Launcher";
 import { FolderRules } from "./components/Tools/FolderRules";
 import { Processes } from "./components/Tools/Processes";
 import { FileTools } from "./components/Tools/FileTools";
+import { AddToDesktop } from "./components/Tools/AddToDesktop";
 import { applyUserThemeCss, normalizeColorMode, normalizeTheme, publishAppearance } from "./lib/appearance";
 import { publishDensity } from "./lib/density";
 import { appSettings, themeCss } from "./lib/app-client";
@@ -300,6 +301,7 @@ export function HomePage() {
           {tool === "folder-rules" ? <FolderRules onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "processes" ? <Processes /> : null}
           {tool === "file-tools" ? <FileTools /> : null}
+          {tool === "add-to-desktop" ? <AddToDesktop /> : null}
         </main>
       </div>
       <StatusBar

@@ -168,6 +168,11 @@ const TOOLS: &[Entry] = &[
         title: "File Tools",
         keywords: "pdf image cad convert",
     },
+    Entry {
+        id: "add-to-desktop",
+        title: "Add to Desktop",
+        keywords: "shortcut apps applications",
+    },
 ];
 
 const ACTIONS: &[Entry] = &[
