@@ -32,6 +32,7 @@ import { isToolId, TOOLS, type ToolId } from "./lib/tools";
 import { publishToolbarLabels, readToolbarLabels } from "./lib/toolbar-labels";
 import { useAppUpdate } from "./lib/use-app-update";
 import { publishZoom } from "./lib/zoom";
+import { VaultLockDialog } from "./components/Dialogs/VaultLockDialog";
 
 function keepUnlockedSnippets(current: ExpansionState, next: ExpansionState): ExpansionState {
   if (!next.locked || next.snippets.length > 0) {
@@ -65,6 +66,8 @@ export function HomePage() {
   const [snippetOpen, setSnippetOpen] = useState(false);
   const [labels, setLabels] = useState(readToolbarLabels);
   const [focusNonce, setFocusNonce] = useState(0);
+
+  const [showVaultLockDialog, setShowVaultLockDialog] = useState(false);
 
   useEffect(() => {
     document.title = "ce-desktop-tools";
@@ -254,6 +257,7 @@ export function HomePage() {
         enabled={expansion.enabled}
         canLock={expansion.settingsFolder.length > 0 && !expansion.locked}
         onToggleExpansion={() => void toggleExpansion()}
+        onUnlock={() => setShowVaultLockDialog(true)}
         onLock={() => void lock()}
         onSettings={() => setSettingsOpen(true)}
       />
@@ -336,6 +340,25 @@ export function HomePage() {
         onClose={updates.dismiss}
         onInstall={() => void updates.install()}
       />
+
+      <VaultLockDialog
+        open={showVaultLockDialog}
+        onClose={() => setShowVaultLockDialog(false)}
+        locked={expansion.locked}
+        needsPin={expansion.needsPin}
+        busy={busy}
+        focusNonce={focusNonce}
+        onCreatePin={async (pin) => {
+          await submitPin(pin, true);
+          setShowVaultLockDialog(false);
+        }}
+        onUnlock={async (pin) => {
+          await submitPin(pin, false);
+          setShowVaultLockDialog(false);
+        }}
+        onLock={lock}
+      />
+
     </div>
   );
 }
