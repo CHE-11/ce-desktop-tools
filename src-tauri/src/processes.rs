@@ -268,6 +268,82 @@ pub fn list() -> Result<Vec<ProcessInfo>, String> {
     Ok(processes)
 }
 
+/// Percent of the machine's CPU since the previous call, for each pid that
+/// could be read both times. The first call only stores a baseline.
+#[cfg(windows)]
+pub(crate) fn cpu_percents(pids: &[u32]) -> std::collections::HashMap<u32, f32> {
+    use std::sync::Mutex;
+    use std::time::Instant;
+
+    struct Sample {
+        ticks: u64,
+        at: Instant,
+    }
+
+    static SAMPLES: Mutex<Option<std::collections::HashMap<u32, Sample>>> = Mutex::new(None);
+
+    let cores = std::thread::available_parallelism()
+        .map(|count| count.get())
+        .unwrap_or(1)
+        .max(1) as f64;
+    let now = Instant::now();
+    let mut guard = SAMPLES.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous = guard.take().unwrap_or_default();
+    let mut current = std::collections::HashMap::new();
+    let mut percents = std::collections::HashMap::new();
+    for pid in pids {
+        let Some(ticks) = process_cpu_ticks(*pid) else {
+            continue;
+        };
+        if let Some(prior) = previous.get(pid) {
+            let elapsed = now.saturating_duration_since(prior.at).as_nanos();
+            if elapsed > 0 {
+                // Process time is in 100 ns ticks. Divide by core count so 100% means the whole machine.
+                let cpu_ns = ticks.saturating_sub(prior.ticks) as f64 * 100.0;
+                let percent = (cpu_ns / elapsed as f64 / cores * 100.0).clamp(0.0, 100.0);
+                percents.insert(*pid, percent as f32);
+            }
+        }
+        current.insert(*pid, Sample { ticks, at: now });
+    }
+    *guard = Some(current);
+    percents
+}
+
+#[cfg(windows)]
+fn process_cpu_ticks(pid: u32) -> Option<u64> {
+    use windows::Win32::Foundation::{CloseHandle, FILETIME};
+    use windows::Win32::System::Threading::{
+        GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+
+    if pid == 0 {
+        return None;
+    }
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let mut created = FILETIME::default();
+        let mut exited = FILETIME::default();
+        let mut kernel = FILETIME::default();
+        let mut user = FILETIME::default();
+        let read = GetProcessTimes(
+            handle,
+            &mut created,
+            &mut exited,
+            &mut kernel,
+            &mut user,
+        );
+        let _ = CloseHandle(handle);
+        read.ok()?;
+        Some(filetime_ticks(kernel).saturating_add(filetime_ticks(user)))
+    }
+}
+
+#[cfg(windows)]
+fn filetime_ticks(time: windows::Win32::Foundation::FILETIME) -> u64 {
+    ((time.dwHighDateTime as u64) << 32) | time.dwLowDateTime as u64
+}
+
 #[cfg(windows)]
 fn details(pid: u32) -> (String, u64) {
     use windows::Win32::Foundation::CloseHandle;
@@ -334,7 +410,7 @@ fn terminate(pid: u32) -> Result<(), String> {
 }
 
 #[cfg(windows)]
-fn tcp_state(state: u32) -> &'static str {
+pub(crate) fn tcp_state(state: u32) -> &'static str {
     match state {
         1 => "CLOSED",
         2 => "LISTENING",
@@ -353,14 +429,14 @@ fn tcp_state(state: u32) -> &'static str {
 }
 
 #[cfg(windows)]
-fn port_of(raw: u32) -> u16 {
+pub(crate) fn port_of(raw: u32) -> u16 {
     u16::from_be((raw & 0xFFFF) as u16)
 }
 
 /// Calls an IP Helper table function twice: once for the size, once for the
 /// rows. The buffer is made of `u64`s so the table header is aligned.
 #[cfg(windows)]
-fn read_table(
+pub(crate) fn read_table(
     fill: impl Fn(Option<*mut std::ffi::c_void>, &mut u32) -> u32,
 ) -> Result<Vec<u64>, String> {
     const ERROR_INSUFFICIENT_BUFFER: u32 = 122;

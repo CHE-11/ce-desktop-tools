@@ -137,7 +137,8 @@ fn write_shortcut(path: &Path, name: &str, app_id: &str) -> Result<(), String> {
     let result = (|| {
         let parsing = format!("shell:AppsFolder\\{app_id}");
         let mut pidl = std::ptr::null_mut();
-        let parsed = unsafe { SHParseDisplayName(&HSTRING::from(&parsing), None, &mut pidl, 0, None) };
+        let parsed =
+            unsafe { SHParseDisplayName(&HSTRING::from(&parsing), None, &mut pidl, 0, None) };
         if parsed.is_ok() && !pidl.is_null() {
             let saved = save_link(path, name, |link| {
                 unsafe { link.SetIDList(pidl) }
@@ -219,12 +220,13 @@ mod tests {
             CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
             CoUninitialize, IPersistFile, STGM_READ,
         };
-        use windows::Win32::UI::Shell::{IShellLinkW, ILFree, ShellLink};
+        use windows::Win32::UI::Shell::{ILFree, IShellLinkW, ShellLink};
         use windows::core::{HSTRING, Interface};
 
         let apps = super::apps_or_refresh().expect("start menu apps");
         let app = &apps[0];
-        let dir = std::env::temp_dir().join(format!("ce-desktop-tools-shortcut-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ce-desktop-tools-shortcut-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let _cleanup = super::Cleanup(&dir);
         let path = dir.join("app.lnk");
@@ -241,7 +243,10 @@ mod tests {
         let mut args = vec![0u16; 1024];
         let _ = unsafe { link.GetArguments(&mut args) };
         let args = String::from_utf16_lossy(
-            &args[..args.iter().position(|unit| *unit == 0).unwrap_or(args.len())],
+            &args[..args
+                .iter()
+                .position(|unit| *unit == 0)
+                .unwrap_or(args.len())],
         );
         let id_list = unsafe { link.GetIDList() };
         let has_id = id_list.as_ref().is_ok_and(|pidl| !pidl.is_null());

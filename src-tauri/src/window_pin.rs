@@ -4,8 +4,8 @@
 //! changing its z-order. A subclass watches that change so the frame and the
 //! toolbar stay in step with the hotkey.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -29,7 +29,8 @@ pub fn install(app: &AppHandle) {
             return;
         };
         unsafe {
-            let _ = windows::Win32::UI::Shell::SetWindowSubclass(hwnd, Some(subclass), SUBCLASS_ID, 0);
+            let _ =
+                windows::Win32::UI::Shell::SetWindowSubclass(hwnd, Some(subclass), SUBCLASS_ID, 0);
         }
         apply(hwnd, topmost(hwnd));
     }

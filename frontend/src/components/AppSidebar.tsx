@@ -9,6 +9,7 @@ import {
   FilePen,
   Files,
   FolderSync,
+  Globe,
   Keyboard,
   MonitorDown,
   Lock,
@@ -38,6 +39,7 @@ const TOOL_ICONS: Record<ToolId, LucideIcon> = {
   launcher: Search,
   "folder-rules": FolderSync,
   processes: Activity,
+  "network-explorer": Globe,
   "file-tools": Files,
   "add-to-desktop": MonitorDown,
 };
@@ -190,7 +192,7 @@ export function AppSidebar({ tool, locked, lockSeconds, onSelect }: AppSidebarPr
                 aria-current={selected ? "page" : undefined}
                 onClick={() => onSelect(entry.id)}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm",
+                  "flex w-full items-center gap-2 rounded-md px-2.5 py-1 text-left text-xs",
                   selected ? "bg-zinc-800 font-medium text-zinc-100" : "text-zinc-300 hover:bg-zinc-800",
                 )}
               >

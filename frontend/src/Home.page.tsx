@@ -21,6 +21,7 @@ import { Pantherbar } from "./components/Tools/Pantherbar";
 import { Launcher } from "./components/Tools/Launcher";
 import { FolderRules } from "./components/Tools/FolderRules";
 import { Processes } from "./components/Tools/Processes";
+import { AppCalls } from "./components/Tools/AppCalls";
 import { FileTools } from "./components/Tools/FileTools";
 import { AddToDesktop } from "./components/Tools/AddToDesktop";
 import { applyUserThemeCss, normalizeColorMode, normalizeTheme, publishAppearance } from "./lib/appearance";
@@ -300,6 +301,7 @@ export function HomePage() {
           {tool === "launcher" ? <Launcher /> : null}
           {tool === "folder-rules" ? <FolderRules onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "processes" ? <Processes /> : null}
+          {tool === "network-explorer" ? <AppCalls /> : null}
           {tool === "file-tools" ? <FileTools /> : null}
           {tool === "add-to-desktop" ? <AddToDesktop /> : null}
         </main>

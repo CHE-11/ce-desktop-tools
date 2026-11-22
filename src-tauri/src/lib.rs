@@ -1,3 +1,4 @@
+mod app_calls;
 mod app_settings;
 mod app_shortcuts;
 mod ascii;
@@ -121,6 +122,43 @@ fn run_megaclip() -> Result<(), String> {
 #[tauri::command]
 fn stop_megaclip() -> Result<(), String> {
     megaclip_script::stop()
+}
+
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    let url = url.trim();
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("That address needs to start with http:// or https://.".into());
+    }
+    // explorer.exe treats a search URL as a folder path. ShellExecute opens the browser.
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        use windows::core::{PCWSTR, w};
+
+        let wide: Vec<u16> = url.encode_utf16().chain(Some(0)).collect();
+        let code = unsafe {
+            ShellExecuteW(
+                None,
+                w!("open"),
+                PCWSTR(wide.as_ptr()),
+                PCWSTR::null(),
+                PCWSTR::null(),
+                SW_SHOWNORMAL,
+            )
+        };
+        let code = code.0 as isize;
+        if code > 32 {
+            return Ok(());
+        }
+        return Err(format!("Couldn't open that link (Windows error {code})."));
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = url;
+        Err("Opening a link only works on Windows.".into())
+    }
 }
 
 #[tauri::command]
@@ -490,6 +528,13 @@ async fn file_lockers(path: String) -> Result<Vec<processes::FileLocker>, String
         .map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+async fn app_calls() -> Result<app_calls::AppCallsSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(app_calls::snapshot)
+        .await
+        .map_err(|error| error.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     taskbar::set_process_app_id();
@@ -626,6 +671,7 @@ pub fn run() {
             app_release,
             app_executable,
             reveal_path,
+            open_url,
             megaclip_running,
             run_megaclip,
             stop_megaclip,
@@ -678,6 +724,7 @@ pub fn run() {
             process_kill,
             port_owners,
             file_lockers,
+            app_calls,
             dev_feedback_probe,
             dev_feedback_push
         ])

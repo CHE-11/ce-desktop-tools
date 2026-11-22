@@ -49,3 +49,7 @@ export function appExecutable() {
 export function revealPath(path: string) {
   return invoke<void>("reveal_path", { path });
 }
+
+export function openUrl(url: string) {
+  return invoke<void>("open_url", { url });
+}

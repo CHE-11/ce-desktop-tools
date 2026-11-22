@@ -164,6 +164,11 @@ const TOOLS: &[Entry] = &[
         keywords: "task manager kill port lock",
     },
     Entry {
+        id: "network-explorer",
+        title: "Network Explorer",
+        keywords: "network processes connections foreground background",
+    },
+    Entry {
         id: "file-tools",
         title: "File Tools",
         keywords: "pdf image cad convert",
