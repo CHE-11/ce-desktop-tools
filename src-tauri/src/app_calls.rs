@@ -136,15 +136,7 @@ fn assemble(
         .map(|group| {
             let pid = background_pid(&group, &windows, &by_pid);
             let title = title_for(&group, &windows, &by_pid);
-            finish(
-                "background",
-                pid,
-                &group,
-                &title,
-                &windows,
-                &by_pid,
-                cpu,
-            )
+            finish("background", pid, &group, &title, &windows, &by_pid, cpu)
         })
         .collect();
     background_apps.sort_by(|left, right| {
@@ -194,7 +186,10 @@ fn finish(
         .filter_map(|each| by_pid.get(each))
         .map(|each| each.memory_bytes)
         .sum();
-    let sampled: Vec<f32> = usage_pids.iter().filter_map(|each| cpu.get(each).copied()).collect();
+    let sampled: Vec<f32> = usage_pids
+        .iter()
+        .filter_map(|each| cpu.get(each).copied())
+        .collect();
     let cpu_percent = if sampled.is_empty() {
         None
     } else {

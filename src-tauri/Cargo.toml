@@ -1,6 +1,6 @@
 [package]
 name = "ce-desktop-tools"
-version = "1.0.23"
+version = "1.0.25"
 description = "Windows desktop tools"
 authors = ["you"]
 edition = "2024"
@@ -46,6 +46,7 @@ windows = { version = "0.61", features = [
   "Win32_System_Ole",
   "Win32_System_Power",
   "Win32_System_ProcessStatus",
+  "Win32_System_RemoteDesktop",
   "Win32_System_RestartManager",
   "Win32_System_SystemInformation",
   "Win32_System_Threading",

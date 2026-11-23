@@ -287,7 +287,9 @@ pub(crate) fn cpu_percents(pids: &[u32]) -> std::collections::HashMap<u32, f32> 
         .unwrap_or(1)
         .max(1) as f64;
     let now = Instant::now();
-    let mut guard = SAMPLES.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut guard = SAMPLES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous = guard.take().unwrap_or_default();
     let mut current = std::collections::HashMap::new();
     let mut percents = std::collections::HashMap::new();
@@ -326,13 +328,7 @@ fn process_cpu_ticks(pid: u32) -> Option<u64> {
         let mut exited = FILETIME::default();
         let mut kernel = FILETIME::default();
         let mut user = FILETIME::default();
-        let read = GetProcessTimes(
-            handle,
-            &mut created,
-            &mut exited,
-            &mut kernel,
-            &mut user,
-        );
+        let read = GetProcessTimes(handle, &mut created, &mut exited, &mut kernel, &mut user);
         let _ = CloseHandle(handle);
         read.ok()?;
         Some(filetime_ticks(kernel).saturating_add(filetime_ticks(user)))

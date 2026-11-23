@@ -864,15 +864,14 @@ impl Inner {
     }
 
     fn reapply_hook(&self) {
-        let current = self
-            .hook
-            .snippets
-            .read()
-            .map(|slot| slot.clone())
-            .unwrap_or_default();
+        let current = match self.hook.snippets.read() {
+            Ok(slot) => Arc::clone(&slot),
+            Err(poisoned) => Arc::clone(&poisoned.into_inner()),
+        };
         let vault = current
-            .into_iter()
+            .iter()
             .filter(|snippet| !snippet.ending && !snippet.timed && !snippet.symbol)
+            .cloned()
             .collect();
         self.apply_hook(vault);
     }
