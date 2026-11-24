@@ -9,6 +9,7 @@ mod dev_feedback;
 mod excel;
 mod expansion;
 mod explorer_restart;
+mod file_associations;
 mod folder_rules;
 mod launcher;
 mod megaclip_script;
@@ -19,6 +20,7 @@ mod processes;
 mod rename;
 mod startup;
 mod taskbar;
+mod terminal;
 mod update;
 mod vault_crypto;
 mod window_pin;
@@ -500,6 +502,135 @@ fn folder_rules_activity(
 }
 
 #[tauri::command]
+async fn file_assoc_list(
+    app: tauri::AppHandle,
+) -> Result<file_associations::FileAssociationsState, String> {
+    tauri::async_runtime::spawn_blocking(move || file_associations::state(&app))
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn file_assoc_apply(
+    app: tauri::AppHandle,
+    association: file_associations::FileAssociation,
+) -> Result<file_associations::FileAssociationsState, String> {
+    tauri::async_runtime::spawn_blocking(move || file_associations::apply(&app, association))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn file_assoc_remove(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<file_associations::FileAssociationsState, String> {
+    tauri::async_runtime::spawn_blocking(move || file_associations::remove(&app, &id))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn file_assoc_lookup(
+    extension: String,
+) -> Result<file_associations::ExtensionHandler, String> {
+    tauri::async_runtime::spawn_blocking(move || file_associations::lookup(&extension))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+fn file_assoc_preview(program_path: String, arguments: String, sample: String) -> String {
+    file_associations::preview(&program_path, &arguments, &sample)
+}
+
+#[tauri::command]
+fn file_assoc_open_default_apps() -> Result<(), String> {
+    file_associations::open_default_apps()
+}
+
+#[tauri::command]
+fn terminal_shells() -> Vec<terminal::ShellInfo> {
+    terminal::shells()
+}
+
+#[tauri::command]
+async fn terminal_spawn(
+    app: tauri::AppHandle,
+    terminals: tauri::State<'_, terminal::Terminals>,
+    shell: String,
+    cwd: Option<String>,
+    cols: u16,
+    rows: u16,
+) -> Result<terminal::TerminalSession, String> {
+    let terminals = terminals.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || terminals.spawn(app, &shell, cwd, cols, rows))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+fn terminal_write(
+    terminals: tauri::State<'_, terminal::Terminals>,
+    id: String,
+    data: String,
+) -> Result<(), String> {
+    terminals.write(&id, &data)
+}
+
+#[tauri::command]
+fn terminal_resize(
+    terminals: tauri::State<'_, terminal::Terminals>,
+    id: String,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
+    terminals.resize(&id, cols, rows)
+}
+
+#[tauri::command]
+fn terminal_kill(terminals: tauri::State<'_, terminal::Terminals>, id: String) {
+    terminals.kill(&id);
+}
+
+#[tauri::command]
+fn terminal_list(terminals: tauri::State<'_, terminal::Terminals>) -> Vec<terminal::TerminalSession> {
+    terminals.list()
+}
+
+#[tauri::command]
+fn terminal_is_folder(path: String) -> bool {
+    std::path::Path::new(&path).is_dir()
+}
+
+#[tauri::command]
+fn terminal_clipboard_text() -> String {
+    #[cfg(windows)]
+    {
+        clipboard_win::get_clipboard_string().unwrap_or_default()
+    }
+    #[cfg(not(windows))]
+    {
+        String::new()
+    }
+}
+
+#[tauri::command]
+fn terminal_settings(app: tauri::AppHandle) -> Result<app_settings::TerminalSettings, String> {
+    app_settings::load_terminal(&app)
+}
+
+#[tauri::command]
+async fn terminal_settings_save(
+    app: tauri::AppHandle,
+    settings: app_settings::TerminalSettings,
+) -> Result<app_settings::TerminalSettings, String> {
+    tauri::async_runtime::spawn_blocking(move || app_settings::save_terminal(&app, settings))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 async fn process_list() -> Result<Vec<processes::ProcessInfo>, String> {
     tauri::async_runtime::spawn_blocking(processes::list)
         .await
@@ -639,6 +770,7 @@ pub fn run() {
             app.manage(pantherbar);
             app.manage(launcher::Launcher::start(app.handle().clone()));
             app.manage(folder_rules::FolderRules::start(app.handle().clone()));
+            app.manage(terminal::Terminals::default());
             if let Ok(settings) = app_settings::app_settings(app.handle()) {
                 if let Err(error) = startup::sync_run_at_startup(settings.run_at_startup) {
                     eprintln!("ce-desktop-tools startup setting was not applied: {error}");
@@ -720,6 +852,22 @@ pub fn run() {
             folder_rules_save,
             folder_rules_run,
             folder_rules_activity,
+            file_assoc_list,
+            file_assoc_apply,
+            file_assoc_remove,
+            file_assoc_lookup,
+            file_assoc_preview,
+            file_assoc_open_default_apps,
+            terminal_shells,
+            terminal_spawn,
+            terminal_write,
+            terminal_resize,
+            terminal_kill,
+            terminal_list,
+            terminal_clipboard_text,
+            terminal_is_folder,
+            terminal_settings,
+            terminal_settings_save,
             process_list,
             process_kill,
             port_owners,
@@ -734,6 +882,9 @@ pub fn run() {
             if let tauri::RunEvent::Exit = event {
                 if let Some(expansion) = app.try_state::<Expansion>() {
                     expansion.shutdown();
+                }
+                if let Some(terminals) = app.try_state::<terminal::Terminals>() {
+                    terminals.kill_all();
                 }
                 #[cfg(debug_assertions)]
                 dev_feedback::clear_port_file();

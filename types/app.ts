@@ -10,3 +10,10 @@ export type AppSettings = {
   toolbarLabels: boolean;
   runAtStartup: boolean;
 };
+
+export type TerminalSettings = {
+  defaultShell: "cmd" | "powershell" | "pwsh";
+  copyOnSelect: boolean;
+  confirmMultilinePaste: boolean;
+  fontSize: number;
+};

@@ -15,6 +15,8 @@ export const TOOLS = [
   { id: "network-explorer", label: "Network Explorer", lockable: false },
   { id: "add-to-desktop", label: "Add to Desktop", lockable: false },
   { id: "file-tools", label: "File Tools", lockable: false },
+  { id: "file-associations", label: "File Associations", lockable: false },
+  { id: "terminal", label: "Terminal", lockable: false },
 ] as const;
 
 export type ToolId = (typeof TOOLS)[number]["id"];

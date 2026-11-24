@@ -6,6 +6,7 @@ import {
   Ruler,
   Cat,
   Clipboard,
+  FileCog,
   FilePen,
   Files,
   FolderSync,
@@ -15,6 +16,7 @@ import {
   Lock,
   Search,
   SpellCheck,
+  SquareTerminal,
   Type,
   Unlock,
   type LucideIcon,
@@ -42,6 +44,8 @@ const TOOL_ICONS: Record<ToolId, LucideIcon> = {
   "network-explorer": Globe,
   "file-tools": Files,
   "add-to-desktop": MonitorDown,
+  "file-associations": FileCog,
+  terminal: SquareTerminal,
 };
 
 const SIDEBAR_WIDTH_KEY = "ce-desktop-tools.sidebar-width";

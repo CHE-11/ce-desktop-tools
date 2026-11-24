@@ -140,6 +140,42 @@ struct PortableFile {
     pantherbar: crate::pantherbar::PantherbarFile,
     #[serde(default)]
     launcher: crate::launcher::LauncherFile,
+    #[serde(default)]
+    terminal: TerminalSettings,
+}
+
+const TERMINAL_SHELLS: &[&str] = &["cmd", "powershell", "pwsh"];
+const DEFAULT_TERMINAL_FONT: u32 = 14;
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TerminalSettings {
+    pub default_shell: String,
+    pub copy_on_select: bool,
+    pub confirm_multiline_paste: bool,
+    pub font_size: u32,
+}
+
+impl Default for TerminalSettings {
+    fn default() -> Self {
+        Self {
+            default_shell: "powershell".into(),
+            copy_on_select: false,
+            confirm_multiline_paste: true,
+            font_size: DEFAULT_TERMINAL_FONT,
+        }
+    }
+}
+
+impl TerminalSettings {
+    fn normalize(&mut self) {
+        if !TERMINAL_SHELLS.contains(&self.default_shell.as_str()) {
+            self.default_shell = TerminalSettings::default().default_shell;
+        }
+        if !(8..=32).contains(&self.font_size) {
+            self.font_size = DEFAULT_TERMINAL_FONT;
+        }
+    }
 }
 
 impl Default for PortableFile {
@@ -153,6 +189,7 @@ impl Default for PortableFile {
             run_at_startup: false,
             pantherbar: crate::pantherbar::PantherbarFile::default(),
             launcher: crate::launcher::LauncherFile::default(),
+            terminal: TerminalSettings::default(),
         }
     }
 }
@@ -417,6 +454,10 @@ fn read_local(app: &AppHandle) -> Result<PortableFile, String> {
             .get("launcher")
             .and_then(|value| serde_json::from_value(value).ok())
             .unwrap_or_default(),
+        terminal: settings
+            .get("terminal")
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default(),
     };
     file.normalize_in_place();
     Ok(file)
@@ -437,6 +478,7 @@ fn write_local(app: &AppHandle, file: &PortableFile) -> Result<(), String> {
     store.set("runAtStartup", json!(file.run_at_startup));
     store.set("pantherbar", json!(file.pantherbar));
     store.set("launcher", json!(file.launcher));
+    store.set("terminal", json!(file.terminal));
     store.set(POINTER_KEY, "");
     store.save().map_err(|error| error.to_string())
 }
@@ -589,7 +631,26 @@ impl PortableFile {
         self.color_mode = normalize_color_mode(&self.color_mode);
         self.pantherbar.normalize();
         self.launcher.normalize();
+        self.terminal.normalize();
     }
+}
+
+pub fn load_terminal(app: &AppHandle) -> Result<TerminalSettings, String> {
+    with_settings_lock(|| {
+        let mut settings = load_locked(app)?.file.terminal;
+        settings.normalize();
+        Ok(settings)
+    })
+}
+
+pub fn save_terminal(
+    app: &AppHandle,
+    mut next: TerminalSettings,
+) -> Result<TerminalSettings, String> {
+    next.normalize();
+    let saved = next.clone();
+    save_section(app, move |file| file.terminal = next)?;
+    Ok(saved)
 }
 
 pub fn load_launcher(app: &AppHandle) -> Result<crate::launcher::LauncherFile, String> {

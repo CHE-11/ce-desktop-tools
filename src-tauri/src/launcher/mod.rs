@@ -178,6 +178,16 @@ const TOOLS: &[Entry] = &[
         title: "Add to Desktop",
         keywords: "shortcut apps applications",
     },
+    Entry {
+        id: "file-associations",
+        title: "File Associations",
+        keywords: "open with default program extension",
+    },
+    Entry {
+        id: "terminal",
+        title: "Terminal",
+        keywords: "cmd powershell console shell command prompt",
+    },
 ];
 
 const ACTIONS: &[Entry] = &[

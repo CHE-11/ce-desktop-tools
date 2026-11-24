@@ -24,6 +24,8 @@ import { Processes } from "./components/Tools/Processes";
 import { AppCalls } from "./components/Tools/AppCalls";
 import { FileTools } from "./components/Tools/FileTools";
 import { AddToDesktop } from "./components/Tools/AddToDesktop";
+import { FileAssociations } from "./components/Tools/FileAssociations";
+import { TerminalTool } from "./components/Tools/Terminal";
 import { applyUserThemeCss, normalizeColorMode, normalizeTheme, publishAppearance } from "./lib/appearance";
 import { publishDensity } from "./lib/density";
 import { appSettings, themeCss } from "./lib/app-client";
@@ -304,6 +306,10 @@ export function HomePage() {
           {tool === "network-explorer" ? <AppCalls /> : null}
           {tool === "file-tools" ? <FileTools /> : null}
           {tool === "add-to-desktop" ? <AddToDesktop /> : null}
+          {tool === "file-associations" ? <FileAssociations onOpenSettings={() => setSettingsOpen(true)} /> : null}
+          <div id="terminal-panel" className={tool === "terminal" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+            <TerminalTool active={tool === "terminal"} />
+          </div>
         </main>
       </div>
       <StatusBar

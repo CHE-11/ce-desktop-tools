@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent }
 import type { PantherbarSave, PantherbarState } from "../../../../types/pantherbar";
 import { hotkeyName } from "../../lib/hotkey";
 import { pantherbarSave, pantherbarState } from "../../lib/pantherbar-client";
+import { cn } from "../../lib/cn";
 import { messageOf } from "../../lib/message";
 import { Button } from "../Button";
 import { PantherbarIcon } from "./PantherbarIcon";
@@ -64,6 +65,7 @@ export function Pantherbar() {
   const stateRef = useRef(state);
   const queue = useRef(Promise.resolve());
   const dragIndex = useRef<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
   stateRef.current = state;
 
   useEffect(() => {
@@ -280,15 +282,45 @@ export function Pantherbar() {
                   <li
                     id={`pantherbar-row-${id}`}
                     key={id}
-                    draggable
-                    onDragStart={() => {
-                      dragIndex.current = index;
-                    }}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={() => moveInstalled(index)}
-                    className="flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5"
+                    data-index={index}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md border bg-zinc-900 px-2 py-1.5",
+                      dropIndex === index && dragIndex.current !== index ? "border-sky-500" : "border-zinc-800",
+                      dragIndex.current === index && dropIndex !== null && "opacity-50",
+                    )}
                   >
-                    <GripVertical id={`pantherbar-row-${id}-grip`} className="size-4 shrink-0 text-zinc-500" aria-hidden="true" />
+                    <span
+                      id={`pantherbar-row-${id}-grip`}
+                      className="shrink-0 cursor-grab touch-none text-zinc-500 active:cursor-grabbing"
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                        dragIndex.current = index;
+                        setDropIndex(index);
+                      }}
+                      onPointerMove={(event) => {
+                        if (dragIndex.current === null) {
+                          return;
+                        }
+                        const row = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("#pantherbar-installed-list > li");
+                        if (row?.dataset.index) {
+                          setDropIndex(Number(row.dataset.index));
+                        }
+                      }}
+                      onPointerUp={() => {
+                        const to = dropIndex;
+                        setDropIndex(null);
+                        if (to !== null) {
+                          moveInstalled(to);
+                        }
+                      }}
+                      onPointerCancel={() => {
+                        dragIndex.current = null;
+                        setDropIndex(null);
+                      }}
+                    >
+                      <GripVertical id={`pantherbar-row-${id}-grip-icon`} className="size-4" aria-hidden="true" />
+                    </span>
                     <PantherbarIcon id={`pantherbar-row-${id}-icon`} name={action.icon} className="size-4 shrink-0 text-zinc-300" />
                     <span id={`pantherbar-row-${id}-name`} className="min-w-0 flex-1 truncate text-sm text-zinc-100">
                       {action.name}

@@ -1,7 +1,7 @@
 {
   "name": "ce-desktop-tools",
   "private": true,
-  "version": "1.0.25",
+  "version": "1.0.26",
   "scripts": {
     "dev": "pnpm --dir frontend dev",
     "build": "pnpm --dir frontend build",
