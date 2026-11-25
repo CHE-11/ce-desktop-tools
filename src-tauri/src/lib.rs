@@ -4,6 +4,7 @@ mod app_shortcuts;
 mod ascii;
 mod clipboard;
 mod date_expand;
+mod desktop_app_details;
 mod desktop_apps;
 mod dev_feedback;
 mod excel;
@@ -638,6 +639,13 @@ async fn process_list() -> Result<Vec<processes::ProcessInfo>, String> {
 }
 
 #[tauri::command]
+async fn process_icons(paths: Vec<String>) -> Result<Vec<processes::ProcessIcon>, String> {
+    tauri::async_runtime::spawn_blocking(move || processes::icons(&paths))
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 async fn process_kill(pid: u32, tree: bool) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || processes::kill(pid, tree))
         .await
@@ -869,6 +877,7 @@ pub fn run() {
             terminal_settings,
             terminal_settings_save,
             process_list,
+            process_icons,
             process_kill,
             port_owners,
             file_lockers,

@@ -1,7 +1,8 @@
 //! Start menu apps, and a shortcut for one of them on the desktop.
 //!
-//! The list is the same `Get-StartApps` cache the launcher uses. A shortcut
-//! points at that app's shell item so Windows keeps its icon.
+//! The list is the same `Get-StartApps` cache the launcher uses. Each row also
+//! carries the publisher, version, install path, and icon. A shortcut points
+//! at that app's shell item so Windows keeps its icon.
 
 use std::path::{Path, PathBuf};
 
@@ -13,18 +14,31 @@ pub struct DesktopApp {
     pub name: String,
     pub app_id: String,
     pub on_desktop: bool,
+    pub publisher: Option<String>,
+    pub version: Option<String>,
+    pub kind: String,
+    pub location: Option<String>,
+    pub icon: Option<String>,
 }
 
 pub fn list() -> Result<Vec<DesktopApp>, String> {
     let desktop = desktop_dir()?;
-    Ok(apps_or_refresh()?
+    let apps = apps_or_refresh()?;
+    let facts = crate::desktop_app_details::facts_for(&apps);
+    Ok(apps
         .into_iter()
-        .map(|app| {
+        .zip(facts)
+        .map(|(app, facts)| {
             let on_desktop = shortcut_path(&desktop, &app.name).exists();
             DesktopApp {
                 name: app.name,
                 app_id: app.app_id,
                 on_desktop,
+                publisher: facts.publisher,
+                version: facts.version,
+                kind: facts.kind,
+                location: facts.location,
+                icon: facts.icon,
             }
         })
         .collect())

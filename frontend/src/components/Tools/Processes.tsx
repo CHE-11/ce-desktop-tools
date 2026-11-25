@@ -1,11 +1,11 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FileLocker, PortOwner, ProcessInfo } from "../../../../types/processes";
 import { revealPath } from "../../lib/app-client";
 import { cn } from "../../lib/cn";
 import { messageOf, pickedFolderPath } from "../../lib/message";
-import { fileLockers, formatBytes, portOwners, processKill, processList } from "../../lib/processes-client";
+import { fileLockers, formatBytes, portOwners, processIcons, processKill, processList } from "../../lib/processes-client";
 import { Button } from "../Button";
 
 type Tab = "processes" | "port" | "locks";
@@ -109,12 +109,50 @@ type PanelProps = {
   report: (text: string, error?: boolean) => void;
 };
 
+type ProcessGroup = {
+  key: string;
+  name: string;
+  path: string;
+  memoryBytes: number;
+  processes: ProcessInfo[];
+};
+
+function groupDomId(key: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < key.length; index += 1) {
+    hash ^= key.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function compareProcesses(sort: SortKey, left: ProcessInfo, right: ProcessInfo) {
+  if (sort === "name") {
+    return left.name.localeCompare(right.name, undefined, { sensitivity: "base" }) || left.pid - right.pid;
+  }
+  if (sort === "pid") {
+    return left.pid - right.pid;
+  }
+  return right.memoryBytes - left.memoryBytes || left.pid - right.pid;
+}
+
+function ProcessGlyph({ id, src }: { id: string; src: string | undefined }) {
+  if (!src) {
+    return <span id={id} className="size-4 shrink-0 rounded-sm bg-zinc-800" aria-hidden="true" />;
+  }
+  return <img id={id} src={src} alt="" className="size-4 shrink-0" />;
+}
+
 function ProcessTable({ report }: PanelProps) {
   const [processes, setProcesses] = useState<ProcessInfo[]>([]);
+  const [icons, setIcons] = useState<Map<string, string>>(() => new Map());
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<SortKey>("memory");
+  const [grouped, setGrouped] = useState(true);
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
   const [live, setLive] = useState(true);
   const [loaded, setLoaded] = useState(false);
+  const askedIcons = useRef(new Set<string>());
   const { armed, confirm } = useConfirm();
 
   const refresh = useCallback(async () => {
@@ -139,7 +177,43 @@ function ProcessTable({ report }: PanelProps) {
     return () => window.clearInterval(timer);
   }, [live, refresh]);
 
-  const rows = useMemo(() => {
+  useEffect(() => {
+    const missing = [
+      ...new Set(
+        processes
+          .map((process) => process.path)
+          .filter((path) => path && !askedIcons.current.has(path.toLowerCase())),
+      ),
+    ];
+    if (missing.length === 0) {
+      return;
+    }
+    for (const path of missing) {
+      askedIcons.current.add(path.toLowerCase());
+    }
+    void processIcons(missing)
+      .then((found) => {
+        if (found.length === 0) {
+          return;
+        }
+        setIcons((current) => {
+          const next = new Map(current);
+          for (const entry of found) {
+            if (entry.icon) {
+              next.set(entry.path.toLowerCase(), entry.icon);
+            }
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        for (const path of missing) {
+          askedIcons.current.delete(path.toLowerCase());
+        }
+      });
+  }, [processes]);
+
+  const groups = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     const matching = needle
       ? processes.filter(
@@ -149,16 +223,54 @@ function ProcessTable({ report }: PanelProps) {
             process.path.toLowerCase().includes(needle),
         )
       : processes;
-    return [...matching].sort((left, right) => {
+    const buckets = new Map<string, ProcessInfo[]>();
+    for (const process of matching) {
+      const key = grouped && process.path ? process.path.toLowerCase() : `pid:${process.pid}`;
+      const members = buckets.get(key);
+      if (members) {
+        members.push(process);
+      } else {
+        buckets.set(key, [process]);
+      }
+    }
+    const built: ProcessGroup[] = [...buckets.entries()].map(([key, members]) => {
+      const processesInGroup = [...members].sort((left, right) => compareProcesses(sort, left, right));
+      const lead = processesInGroup.reduce((best, process) =>
+        process.memoryBytes > best.memoryBytes ? process : best,
+      );
+      return {
+        key,
+        name: lead.name,
+        path: lead.path,
+        memoryBytes: processesInGroup.reduce((sum, process) => sum + process.memoryBytes, 0),
+        processes: processesInGroup,
+      };
+    });
+    built.sort((left, right) => {
       if (sort === "name") {
         return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
       }
       if (sort === "pid") {
-        return left.pid - right.pid;
+        return left.processes[0].pid - right.processes[0].pid;
       }
       return right.memoryBytes - left.memoryBytes;
     });
-  }, [processes, filter, sort]);
+    return built;
+  }, [processes, filter, sort, grouped]);
+
+  const matchedCount = groups.reduce((sum, group) => sum + group.processes.length, 0);
+
+  function toggleGroup(key: string) {
+    setOpenGroups((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
 
   async function kill(process: ProcessInfo, tree: boolean) {
     try {
@@ -199,9 +311,22 @@ function ProcessTable({ report }: PanelProps) {
           className={cn(INPUT, "w-72")}
         />
         <span id="processes-count" className="text-xs text-zinc-500">
-          {loaded ? `${rows.length} of ${processes.length}` : "Loading"}
+          {loaded
+            ? grouped
+              ? `${groups.length} groups · ${matchedCount} of ${processes.length}`
+              : `${matchedCount} of ${processes.length}`
+            : "Loading"}
         </span>
-        <label id="processes-live-label" className="ml-auto flex items-center gap-1.5 text-sm text-zinc-300">
+        <label id="processes-group-label" className="ml-auto flex items-center gap-1.5 text-sm text-zinc-300">
+          <input
+            id="processes-group"
+            type="checkbox"
+            checked={grouped}
+            onChange={(event) => setGrouped(event.target.checked)}
+          />
+          Group by path
+        </label>
+        <label id="processes-live-label" className="flex items-center gap-1.5 text-sm text-zinc-300">
           <input id="processes-live" type="checkbox" checked={live} onChange={(event) => setLive(event.target.checked)} />
           Refresh every 3 seconds
         </label>
@@ -214,7 +339,7 @@ function ProcessTable({ report }: PanelProps) {
         <table id="processes-table" className="w-full table-fixed text-left text-sm">
           <thead id="processes-table-head" className="sticky top-0 bg-zinc-900 text-xs text-zinc-500">
             <tr id="processes-table-head-row">
-              {header("name", "Name", "w-56 pl-3")}
+              {header("name", "Name", "w-64 pl-3")}
               {header("pid", "PID", "w-20")}
               {header("memory", "Memory", "w-24")}
               <th id="processes-head-path" className="py-1.5 pr-3 font-medium">
@@ -228,52 +353,164 @@ function ProcessTable({ report }: PanelProps) {
             </tr>
           </thead>
           <tbody id="processes-table-body">
-            {rows.map((process) => {
-              const base = `processes-row-${process.pid}`;
+            {groups.map((group) => {
+              const many = grouped && group.processes.length > 1;
+              const open = many && openGroups.has(group.key);
+              const base = many ? `processes-group-${groupDomId(group.key)}` : `processes-row-${group.processes[0].pid}`;
+              const icon = icons.get(group.path.toLowerCase());
               return (
-                <tr id={base} key={process.pid} className="border-t border-zinc-800 hover:bg-zinc-900">
-                  <td id={`${base}-name`} className={cn(CELL, "pl-3 text-zinc-100")} title={process.name}>
-                    {process.name}
-                  </td>
-                  <td id={`${base}-pid`} className={cn(CELL, "font-mono text-xs text-zinc-400")}>
-                    {process.pid}
-                  </td>
-                  <td id={`${base}-memory`} className={cn(CELL, "text-zinc-300 tabular-nums")}>
-                    {process.memoryBytes > 0 ? formatBytes(process.memoryBytes) : ""}
-                  </td>
-                  <td id={`${base}-path`} className={cn(CELL, "text-xs text-zinc-500")} title={process.path}>
-                    {process.path}
-                  </td>
-                  <td id={`${base}-actions`} className="py-1 pr-3">
-                    <div id={`${base}-actions-row`} className="flex justify-end gap-1">
-                      <Button
-                        id={`${base}-reveal`}
-                        variant="ghost"
-                        size="xs"
-                        disabled={!process.path}
-                        onClick={() => void revealPath(process.path).catch((caught) => report(messageOf(caught), true))}
-                      >
-                        Show file
-                      </Button>
-                      <Button
-                        id={`${base}-kill-tree`}
-                        variant={armed === `${process.pid}-tree` ? "destructive" : "ghost"}
-                        size="xs"
-                        onClick={() => confirm(`${process.pid}-tree`, () => void kill(process, true))}
-                      >
-                        {armed === `${process.pid}-tree` ? "Confirm" : "Kill tree"}
-                      </Button>
-                      <Button
-                        id={`${base}-kill`}
-                        variant={armed === `${process.pid}` ? "destructive" : "outline"}
-                        size="xs"
-                        onClick={() => confirm(`${process.pid}`, () => void kill(process, false))}
-                      >
-                        {armed === `${process.pid}` ? "Confirm" : "Kill"}
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
+                <Fragment key={group.key}>
+                  <tr id={base} className="border-t border-zinc-800 hover:bg-zinc-900">
+                    <td id={`${base}-name`} className={cn(CELL, "pl-3 text-zinc-100")}>
+                      <span id={`${base}-name-row`} className="flex min-w-0 items-center gap-1.5">
+                        {many ? (
+                          <button
+                            id={`${base}-toggle`}
+                            type="button"
+                            aria-expanded={open}
+                            aria-label={open ? `Hide processes for ${group.name}` : `Show processes for ${group.name}`}
+                            onClick={() => toggleGroup(group.key)}
+                            className="rounded p-0.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                          >
+                            {open ? (
+                              <ChevronDown id={`${base}-toggle-icon`} className="size-3.5" aria-hidden="true" />
+                            ) : (
+                              <ChevronRight id={`${base}-toggle-icon`} className="size-3.5" aria-hidden="true" />
+                            )}
+                          </button>
+                        ) : grouped ? (
+                          <span id={`${base}-toggle-spacer`} className="size-3.5 shrink-0" aria-hidden="true" />
+                        ) : null}
+                        <ProcessGlyph id={`${base}-icon`} src={icon} />
+                        {many ? (
+                          <button
+                            id={`${base}-name-button`}
+                            type="button"
+                            title={group.name}
+                            onClick={() => toggleGroup(group.key)}
+                            className="min-w-0 truncate text-left hover:text-zinc-50"
+                          >
+                            {group.name}
+                          </button>
+                        ) : (
+                          <span id={`${base}-label`} className="min-w-0 truncate" title={group.name}>
+                            {group.name}
+                          </span>
+                        )}
+                        {many ? (
+                          <span
+                            id={`${base}-count`}
+                            className="shrink-0 rounded bg-zinc-800 px-1.5 text-xs text-zinc-400"
+                            title={`${group.processes.length} processes`}
+                          >
+                            {group.processes.length}
+                          </span>
+                        ) : null}
+                      </span>
+                    </td>
+                    <td id={`${base}-pid`} className={cn(CELL, "font-mono text-xs text-zinc-400")}>
+                      {many ? "" : group.processes[0].pid}
+                    </td>
+                    <td id={`${base}-memory`} className={cn(CELL, "text-zinc-300 tabular-nums")}>
+                      {group.memoryBytes > 0 ? formatBytes(group.memoryBytes) : ""}
+                    </td>
+                    <td id={`${base}-path`} className={cn(CELL, "text-xs text-zinc-500")} title={group.path}>
+                      {group.path}
+                    </td>
+                    <td id={`${base}-actions`} className="py-1 pr-3">
+                      <div id={`${base}-actions-row`} className="flex justify-end gap-1">
+                        <Button
+                          id={`${base}-reveal`}
+                          variant="ghost"
+                          size="xs"
+                          disabled={!group.path}
+                          onClick={() => void revealPath(group.path).catch((caught) => report(messageOf(caught), true))}
+                        >
+                          Show file
+                        </Button>
+                        {many ? null : (
+                          <>
+                            <Button
+                              id={`${base}-kill-tree`}
+                              variant={armed === `${group.processes[0].pid}-tree` ? "destructive" : "ghost"}
+                              size="xs"
+                              onClick={() =>
+                                confirm(`${group.processes[0].pid}-tree`, () => void kill(group.processes[0], true))
+                              }
+                            >
+                              {armed === `${group.processes[0].pid}-tree` ? "Confirm" : "Kill tree"}
+                            </Button>
+                            <Button
+                              id={`${base}-kill`}
+                              variant={armed === `${group.processes[0].pid}` ? "destructive" : "outline"}
+                              size="xs"
+                              onClick={() => confirm(`${group.processes[0].pid}`, () => void kill(group.processes[0], false))}
+                            >
+                              {armed === `${group.processes[0].pid}` ? "Confirm" : "Kill"}
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  {open
+                    ? group.processes.map((process) => {
+                        const child = `processes-row-${process.pid}`;
+                        return (
+                          <tr id={child} key={process.pid} className="border-t border-zinc-800/80 bg-zinc-950 hover:bg-zinc-900">
+                            <td id={`${child}-name`} className={cn(CELL, "pl-3 text-zinc-300")}>
+                              <span id={`${child}-name-row`} className="flex items-center gap-1.5 pl-5">
+                                <ProcessGlyph id={`${child}-icon`} src={icons.get(process.path.toLowerCase())} />
+                                <span id={`${child}-label`} className="truncate" title={process.name}>
+                                  {process.name}
+                                </span>
+                              </span>
+                            </td>
+                            <td id={`${child}-pid`} className={cn(CELL, "font-mono text-xs text-zinc-400")}>
+                              {process.pid}
+                            </td>
+                            <td id={`${child}-memory`} className={cn(CELL, "text-zinc-300 tabular-nums")}>
+                              {process.memoryBytes > 0 ? formatBytes(process.memoryBytes) : ""}
+                            </td>
+                            <td id={`${child}-path`} className={cn(CELL, "text-xs text-zinc-500")} title={process.path}>
+                              {process.path}
+                            </td>
+                            <td id={`${child}-actions`} className="py-1 pr-3">
+                              <div id={`${child}-actions-row`} className="flex justify-end gap-1">
+                                <Button
+                                  id={`${child}-reveal`}
+                                  variant="ghost"
+                                  size="xs"
+                                  disabled={!process.path}
+                                  onClick={() =>
+                                    void revealPath(process.path).catch((caught) => report(messageOf(caught), true))
+                                  }
+                                >
+                                  Show file
+                                </Button>
+                                <Button
+                                  id={`${child}-kill-tree`}
+                                  variant={armed === `${process.pid}-tree` ? "destructive" : "ghost"}
+                                  size="xs"
+                                  onClick={() => confirm(`${process.pid}-tree`, () => void kill(process, true))}
+                                >
+                                  {armed === `${process.pid}-tree` ? "Confirm" : "Kill tree"}
+                                </Button>
+                                <Button
+                                  id={`${child}-kill`}
+                                  variant={armed === `${process.pid}` ? "destructive" : "outline"}
+                                  size="xs"
+                                  onClick={() => confirm(`${process.pid}`, () => void kill(process, false))}
+                                >
+                                  {armed === `${process.pid}` ? "Confirm" : "Kill"}
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    : null}
+                </Fragment>
               );
             })}
           </tbody>

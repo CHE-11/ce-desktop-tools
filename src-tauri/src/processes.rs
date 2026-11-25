@@ -27,6 +27,14 @@ pub struct ProcessInfo {
     pub memory_bytes: u64,
 }
 
+/// PNG data URL for an executable. Empty when Windows has no icon for that path.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessIcon {
+    pub path: String,
+    pub icon: String,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PortOwner {
@@ -689,9 +697,194 @@ pub fn file_lockers(path: &str) -> Result<Vec<FileLocker>, String> {
     }
 }
 
+/// Icons for the given executable paths. Results are cached for the life of the process.
+#[cfg(windows)]
+pub fn icons(paths: &[String]) -> Vec<ProcessIcon> {
+    with_com(|| cached_icons(paths)).unwrap_or_default()
+}
+
+#[cfg(windows)]
+fn cached_icons(paths: &[String]) -> Vec<ProcessIcon> {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    const LIMIT: usize = 400;
+    static CACHE: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
+
+    let mut guard = CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let cache = guard.get_or_insert_with(HashMap::new);
+    let mut pending = Vec::new();
+    for path in paths.iter().take(LIMIT) {
+        let key = path.to_lowercase();
+        if key.is_empty()
+            || cache.contains_key(&key)
+            || pending
+                .iter()
+                .any(|each: &String| each.eq_ignore_ascii_case(path))
+        {
+            continue;
+        }
+        pending.push(path.clone());
+    }
+    drop(guard);
+
+    let extracted: Vec<(String, String)> = pending
+        .iter()
+        .map(|path| (path.to_lowercase(), extract_icon(path).unwrap_or_default()))
+        .collect();
+
+    let mut guard = CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let cache = guard.get_or_insert_with(HashMap::new);
+    for (key, icon) in extracted {
+        cache.entry(key).or_insert(icon);
+    }
+
+    let mut found = Vec::new();
+    for path in paths.iter().take(LIMIT) {
+        let Some(icon) = cache.get(&path.to_lowercase()) else {
+            continue;
+        };
+        if icon.is_empty() {
+            continue;
+        }
+        found.push(ProcessIcon {
+            path: path.clone(),
+            icon: icon.clone(),
+        });
+    }
+    found
+}
+
+/// Initializes COM for this call and releases it when this thread was the one that started it.
+#[cfg(windows)]
+fn with_com<T>(body: impl FnOnce() -> T) -> Result<T, String> {
+    use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize};
+
+    let hr = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+    let fresh = hr.is_ok() && hr.0 == 0;
+    if hr.is_err() {
+        // Already initialized on this thread, including in a different apartment.
+        let changed = hr.0 == 0x8001_0106_u32 as i32 || hr.0 == 0x8004_01F1_u32 as i32;
+        if !changed {
+            return Err(format!("Couldn't start COM: {hr}"));
+        }
+    }
+    let result = body();
+    if fresh {
+        unsafe { CoUninitialize() };
+    }
+    Ok(result)
+}
+
+#[cfg(windows)]
+fn extract_icon(path: &str) -> Option<String> {
+    use windows::Win32::Foundation::SIZE;
+    use windows::Win32::Graphics::Gdi::{DeleteObject, HGDIOBJ};
+    use windows::Win32::UI::Shell::{
+        IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK, SIIGBF_ICONONLY,
+    };
+    use windows::core::PCWSTR;
+
+    let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+    let factory: IShellItemImageFactory =
+        unsafe { SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None) }.ok()?;
+    let bitmap = unsafe {
+        factory.GetImage(
+            SIZE { cx: 32, cy: 32 },
+            SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK,
+        )
+    }
+    .ok()?;
+    let png = bitmap_png(bitmap);
+    unsafe {
+        let _ = DeleteObject(HGDIOBJ::from(bitmap));
+    }
+    png
+}
+
+/// Shell bitmaps are 32-bit premultiplied BGRA, bottom-up.
+#[cfg(windows)]
+fn bitmap_png(bitmap: windows::Win32::Graphics::Gdi::HBITMAP) -> Option<String> {
+    use image::ImageEncoder;
+    use image::codecs::png::PngEncoder;
+    use windows::Win32::Graphics::Gdi::{BITMAP, GetObjectW, HGDIOBJ};
+
+    let mut info = BITMAP::default();
+    let read = unsafe {
+        GetObjectW(
+            HGDIOBJ::from(bitmap),
+            std::mem::size_of::<BITMAP>() as i32,
+            Some((&mut info as *mut BITMAP).cast()),
+        )
+    };
+    if read == 0 || info.bmBits.is_null() || info.bmBitsPixel != 32 {
+        return None;
+    }
+    let width = info.bmWidth as usize;
+    let height = info.bmHeight.unsigned_abs() as usize;
+    if width == 0 || height == 0 || width > 256 || height > 256 {
+        return None;
+    }
+    let stride = info.bmWidthBytes as usize;
+    if stride < width * 4 {
+        return None;
+    }
+    let src = unsafe { std::slice::from_raw_parts(info.bmBits.cast::<u8>(), stride * height) };
+    let has_alpha = src
+        .chunks(stride)
+        .take(height)
+        .any(|row| row.chunks_exact(4).take(width).any(|pixel| pixel[3] != 0));
+    let mut rgba = vec![0u8; width * height * 4];
+    for y in 0..height {
+        let src_row = &src[(height - 1 - y) * stride..];
+        let dst_row = &mut rgba[y * width * 4..];
+        for x in 0..width {
+            let pixel = &src_row[x * 4..x * 4 + 4];
+            let alpha = if has_alpha { pixel[3] as u32 } else { 255 };
+            let (red, green, blue) = if alpha == 0 || alpha == 255 {
+                (pixel[2] as u32, pixel[1] as u32, pixel[0] as u32)
+            } else {
+                (
+                    pixel[2] as u32 * 255 / alpha,
+                    pixel[1] as u32 * 255 / alpha,
+                    pixel[0] as u32 * 255 / alpha,
+                )
+            };
+            let index = x * 4;
+            dst_row[index] = red as u8;
+            dst_row[index + 1] = green as u8;
+            dst_row[index + 2] = blue as u8;
+            dst_row[index + 3] = alpha as u8;
+        }
+    }
+
+    let mut bytes = Vec::new();
+    PngEncoder::new(&mut bytes)
+        .write_image(
+            &rgba,
+            width as u32,
+            height as u32,
+            image::ExtendedColorType::Rgba8,
+        )
+        .ok()?;
+    Some(format!(
+        "data:image/png;base64,{}",
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes)
+    ))
+}
+
 #[cfg(not(windows))]
 pub fn list() -> Result<Vec<ProcessInfo>, String> {
     Err("Process tools only work on Windows.".into())
+}
+
+#[cfg(not(windows))]
+pub fn icons(_paths: &[String]) -> Vec<ProcessIcon> {
+    Vec::new()
 }
 
 #[cfg(not(windows))]
@@ -790,5 +983,24 @@ mod tests {
         assert_eq!(format_bytes(512), "512 B");
         assert_eq!(format_bytes(1536), "1.5 KB");
         assert_eq!(format_bytes(200 * 1024 * 1024), "200.0 MB");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn an_exe_icon_is_a_png() {
+        let root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
+        let path = format!("{root}\\System32\\notepad.exe");
+        let icons = super::icons(std::slice::from_ref(&path));
+        assert_eq!(icons.len(), 1, "notepad should have an icon");
+        let prefix = "data:image/png;base64,";
+        assert!(icons[0].icon.starts_with(prefix));
+        let bytes = base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            &icons[0].icon[prefix.len()..],
+        )
+        .unwrap();
+        assert!(bytes.starts_with(b"\x89PNG"));
+        let again = super::icons(std::slice::from_ref(&path));
+        assert_eq!(again[0].icon, icons[0].icon);
     }
 }

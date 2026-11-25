@@ -50,6 +50,10 @@ function keepUnlockedSnippets(current: ExpansionState, next: ExpansionState): Ex
   return { ...next, snippets: visible };
 }
 
+function closeMainWindow() {
+  return getCurrentWindow().close();
+}
+
 const EMPTY_EXPANSION: ExpansionState = {
   settingsFolder: "",
   snippets: [],
@@ -71,6 +75,7 @@ export function HomePage() {
   const [labels, setLabels] = useState(readToolbarLabels);
   const [pinned, setPinned] = useState(false);
   const [focusNonce, setFocusNonce] = useState(0);
+  const [maximized, setMaximized] = useState(false);
 
   const [showVaultLockDialog, setShowVaultLockDialog] = useState(false);
 
@@ -179,6 +184,34 @@ export function HomePage() {
       .catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    const appWindow = getCurrentWindow();
+    let unlisten: (() => void) | undefined;
+    void appWindow.isMaximized().then(setMaximized).catch(() => undefined);
+    void appWindow.onResized(() => {
+      void appWindow.isMaximized().then(setMaximized).catch(() => undefined);
+    }).then((stop) => {
+      unlisten = stop;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  const toggleMaximized = useCallback(async () => {
+    const appWindow = getCurrentWindow();
+    try {
+      if (await appWindow.isMaximized()) {
+        await appWindow.unmaximize();
+      } else {
+        await appWindow.maximize();
+      }
+      setMaximized(await appWindow.isMaximized());
+    } catch (caught) {
+      setError(messageOf(caught));
+    }
+  }, []);
+
   const saveSnippets = useCallback(async (snippets: Snippet[]) => {
     setBusy(true);
     setError(null);
@@ -256,6 +289,9 @@ export function HomePage() {
         onTogglePin={() => void togglePinned()}
         onLock={() => void lock()}
         onSettings={() => setSettingsOpen(true)}
+        onMaximize={() => void toggleMaximized()}
+        onClose={() => void closeMainWindow()}
+        maximized={maximized}
       />
       {error ? (
         <p id="home-error" className="border-b border-red-900 bg-red-950/40 px-4 py-2 text-sm text-red-300">

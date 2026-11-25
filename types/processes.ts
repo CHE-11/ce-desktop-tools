@@ -6,6 +6,12 @@ export type ProcessInfo = {
   memoryBytes: number;
 };
 
+/** A program icon for an executable path, as a PNG data URL. */
+export type ProcessIcon = {
+  path: string;
+  icon: string;
+};
+
 export type PortOwner = {
   protocol: string;
   localPort: number;

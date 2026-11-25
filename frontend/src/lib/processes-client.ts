@@ -1,8 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { FileLocker, PortOwner, ProcessInfo } from "../../../types/processes";
+import type { FileLocker, PortOwner, ProcessIcon, ProcessInfo } from "../../../types/processes";
 
 export function processList() {
   return invoke<ProcessInfo[]>("process_list");
+}
+
+/** Icons for executable paths. Paths that have no icon are left out. */
+export function processIcons(paths: string[]) {
+  return invoke<ProcessIcon[]>("process_icons", { paths });
 }
 
 export function processKill(pid: number, tree: boolean) {

@@ -1,4 +1,4 @@
-import { MonitorDown } from "lucide-react";
+import { AppWindow, MonitorDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DesktopApp } from "../../../../types/desktop-apps";
 import { cn } from "../../lib/cn";
@@ -8,6 +8,11 @@ import { Button } from "../Button";
 
 function rowId(appId: string) {
   return appId.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80);
+}
+
+function detailLine(app: DesktopApp) {
+  const kind = app.kind === "store" ? "Store" : "Desktop";
+  return [app.publisher, app.version, kind].filter((part) => part && part.trim().length > 0).join(" · ");
 }
 
 export function AddToDesktop() {
@@ -36,7 +41,13 @@ export function AddToDesktop() {
     if (!needle) {
       return apps;
     }
-    return apps.filter((app) => app.name.toLowerCase().includes(needle));
+    return apps.filter((app) =>
+      [app.name, app.publisher, app.version, app.location, app.kind, app.appId]
+        .filter((part) => part && part.length > 0)
+        .join(" ")
+        .toLowerCase()
+        .includes(needle),
+    );
   }, [apps, filter]);
 
   const add = useCallback(async (app: DesktopApp) => {
@@ -68,14 +79,14 @@ export function AddToDesktop() {
           </h1>
         </div>
         <p id="add-to-desktop-summary" className="text-sm text-zinc-400">
-          Start menu apps and Store apps. Add puts a shortcut on the desktop.
+          Start menu and Store apps, with the publisher, version, and icon. Add puts a shortcut on the desktop.
         </p>
         <input
           id="add-to-desktop-search"
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
           aria-label="Search apps"
-          placeholder="Search apps"
+          placeholder="Search name or publisher"
           className="h-8 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-sky-500"
         />
       </header>
@@ -93,7 +104,7 @@ export function AddToDesktop() {
       <div id="add-to-desktop-scroll" className="min-h-0 flex-1 overflow-auto">
         {!loaded ? (
           <p id="add-to-desktop-loading" className="px-4 py-3 text-sm text-zinc-400">
-            Looking up Start menu apps…
+            Reading Start menu apps…
           </p>
         ) : rows.length === 0 ? (
           <p id="add-to-desktop-empty" className="px-4 py-3 text-sm text-zinc-400">
@@ -108,13 +119,51 @@ export function AddToDesktop() {
                 <li
                   id={`add-to-desktop-row-${id}`}
                   key={app.appId}
-                  className="flex items-center gap-3 px-4 py-2"
+                  className="flex items-center gap-3 px-4 py-2.5"
                 >
-                  <span id={`add-to-desktop-name-${id}`} className="min-w-0 flex-1 truncate text-sm text-zinc-100">
-                    {app.name}
+                  <span
+                    id={`add-to-desktop-icon-wrap-${id}`}
+                    className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-zinc-900"
+                  >
+                    {app.icon ? (
+                      <img
+                        id={`add-to-desktop-icon-${id}`}
+                        src={app.icon}
+                        alt=""
+                        className="size-8 object-contain"
+                      />
+                    ) : (
+                      <AppWindow
+                        id={`add-to-desktop-icon-${id}`}
+                        className="size-4 text-zinc-500"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </span>
+                  <span id={`add-to-desktop-copy-${id}`} className="min-w-0 flex-1">
+                    <span
+                      id={`add-to-desktop-name-${id}`}
+                      title={app.appId}
+                      className="block truncate text-sm text-zinc-100"
+                    >
+                      {app.name}
+                    </span>
+                    <span id={`add-to-desktop-meta-${id}`} className="block truncate text-xs text-zinc-400">
+                      {detailLine(app)}
+                    </span>
+                    {app.location ? (
+                      <span
+                        id={`add-to-desktop-location-${id}`}
+                        title={app.location}
+                        className="block truncate text-xs text-zinc-500"
+                      >
+                        {app.location}
+                      </span>
+                    ) : null}
                   </span>
                   <Button
                     id={`add-to-desktop-add-${id}`}
+                    className="shrink-0"
                     size="sm"
                     variant={app.onDesktop ? "ghost" : "secondary"}
                     disabled={app.onDesktop || busy || pending !== null}
