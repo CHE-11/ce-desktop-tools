@@ -15,7 +15,7 @@ use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
-use hook::HookState;
+use hook::{HookHealth, HookState};
 pub use store::Snippet;
 
 static QUITTING: AtomicBool = AtomicBool::new(false);
@@ -31,6 +31,7 @@ pub struct ExpansionState {
     pub error: Option<String>,
     /// Seconds until the vault locks itself. Absent while the vault is locked.
     pub lock_seconds: Option<u64>,
+    pub hook: Option<HookHealth>,
 }
 
 struct Inner {
@@ -709,6 +710,7 @@ impl Expansion {
             needs_pin: self.inner.needs_pin.load(Ordering::Relaxed),
             error: self.inner.error.lock().ok().and_then(|slot| slot.clone()),
             lock_seconds: self.inner.lock_seconds(),
+            hook: Some(self.inner.hook.health()),
         }
     }
 
@@ -1108,6 +1110,7 @@ impl Inner {
                 needs_pin: self.needs_pin.load(Ordering::Relaxed),
                 error: Some(error),
                 lock_seconds: None,
+                hook: Some(self.hook.health()),
             },
         );
     }
@@ -1151,6 +1154,7 @@ impl Inner {
             needs_pin: self.needs_pin.load(Ordering::Relaxed),
             error,
             lock_seconds: self.lock_seconds(),
+            hook: Some(self.hook.health()),
         }
     }
 }

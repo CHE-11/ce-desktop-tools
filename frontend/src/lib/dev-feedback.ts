@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect } from "react";
+import type { ExpansionHookHealth } from "../../../types/expansion";
 
 const PUSH_DELAY_MS = 300;
 const UI_LIMIT = 400;
@@ -21,6 +22,7 @@ export type DevWorkspaceInput = {
   expansionLocked: boolean;
   needsPin: boolean;
   expansionError: string | null;
+  expansionHook: ExpansionHookHealth | null;
   dialogs: DevDialogs;
 };
 
@@ -210,6 +212,7 @@ function workspaceSection(input: DevWorkspaceInput) {
     needsPin: input.needsPin,
     expansionPaused: !input.expansionEnabled,
     expansionError: input.expansionError,
+    expansionHook: input.expansionHook,
     dialogs: input.dialogs,
   };
 }

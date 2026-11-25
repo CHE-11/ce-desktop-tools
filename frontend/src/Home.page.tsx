@@ -2,7 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useState } from "react";
 import type { AppSettings } from "../../types/app";
-import type { ExpansionState, Snippet } from "../../types/expansion";
+import type { ExpansionHookHealth, ExpansionState, Snippet } from "../../types/expansion";
 import { AppSidebar } from "./components/AppSidebar";
 import { SettingsDialog } from "./components/Dialogs/Settings/SettingsDialog";
 import { UpdateDialog } from "./components/Dialogs/UpdateDialog";
@@ -123,6 +123,9 @@ export function HomePage() {
       listen<boolean>("expansion-enabled", (event) => {
         setExpansion((current) => ({ ...current, enabled: event.payload }));
       }),
+      listen<ExpansionHookHealth>("expansion-hook-health", (event) => {
+        setExpansion((current) => ({ ...current, hook: event.payload }));
+      }),
       listen("expansion-unlock-request", () => {
         setTool("expansion");
         setFocusNonce((value) => value + 1);
@@ -233,6 +236,7 @@ export function HomePage() {
     expansionLocked: expansion.locked,
     needsPin: expansion.needsPin,
     expansionError: expansion.error ?? error,
+    expansionHook: expansion.hook ?? null,
     dialogs: {
       settings: settingsOpen,
       snippet: snippetOpen,
