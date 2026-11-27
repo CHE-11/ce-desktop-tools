@@ -16,18 +16,15 @@ import { CalculatorUnits } from "./components/Tools/CalculatorUnits";
 import { Clipboard } from "./components/Tools/Clipboard";
 import { KeyboardShortcuts } from "./components/Tools/KeyboardShortcuts";
 import { BatchRename } from "./components/Tools/BatchRename";
-import { Pantherbar } from "./components/Tools/Pantherbar";
+import { Pantherbar } from "./components/Tools/Pantherbar/Pantherbar";
 import { AlwaysOnTop } from "./components/Tools/AlwaysOnTop";
-import { ColorPicker } from "./components/Tools/ColorPicker";
-import { Launcher } from "./components/Tools/Launcher";
-import { ScreenRuler } from "./components/Tools/ScreenRuler";
 import { FolderRules } from "./components/Tools/FolderRules";
 import { Processes } from "./components/Tools/Processes";
 import { AppCalls } from "./components/Tools/AppCalls";
 import { FileTools } from "./components/Tools/FileTools";
 import { AddToDesktop } from "./components/Tools/AddToDesktop";
 import { FileAssociations } from "./components/Tools/FileAssociations";
-import { TerminalTool } from "./components/Tools/Terminal";
+import { TerminalTool } from "./components/Tools/Terminal/Terminal";
 import { applyUserThemeCss, normalizeColorMode, normalizeTheme, publishAppearance } from "./lib/appearance";
 import { publishDensity } from "./lib/density";
 import { appSettings, themeCss } from "./lib/app-client";
@@ -40,6 +37,9 @@ import { useAppUpdate } from "./lib/use-app-update";
 import { alwaysOnTop, setAlwaysOnTop } from "./lib/window-client";
 import { publishZoom } from "./lib/zoom";
 import { VaultLockDialog } from "./components/Dialogs/VaultLockDialog";
+import { ColorPicker } from "./components/Tools/ColorPicker/ColorPicker";
+import { Launcher } from "./components/Tools/Launcher/Launcher";
+import { ScreenRuler } from "./components/Tools/ScreenRuler/ScreenRuler";
 
 function keepUnlockedSnippets(current: ExpansionState, next: ExpansionState): ExpansionState {
   if (!next.locked || next.snippets.length > 0) {

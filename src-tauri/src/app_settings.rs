@@ -157,11 +157,31 @@ const DEFAULT_TERMINAL_FONT: u32 = 14;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+pub struct TerminalScript {
+    pub id: String,
+    pub name: String,
+    pub body: String,
+}
+
+impl Default for TerminalScript {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            body: String::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct TerminalSettings {
     pub default_shell: String,
     pub copy_on_select: bool,
     pub confirm_multiline_paste: bool,
     pub font_size: u32,
+    pub show_scripts: bool,
+    pub scripts: Vec<TerminalScript>,
 }
 
 impl Default for TerminalSettings {
@@ -171,6 +191,8 @@ impl Default for TerminalSettings {
             copy_on_select: false,
             confirm_multiline_paste: true,
             font_size: DEFAULT_TERMINAL_FONT,
+            show_scripts: false,
+            scripts: Vec::new(),
         }
     }
 }
@@ -182,6 +204,15 @@ impl TerminalSettings {
         }
         if !(8..=32).contains(&self.font_size) {
             self.font_size = DEFAULT_TERMINAL_FONT;
+        }
+        self.scripts.retain(|script| !script.id.trim().is_empty());
+        for script in &mut self.scripts {
+            script.id = script.id.trim().to_string();
+            script.name = script.name.trim().to_string();
+            if script.name.is_empty() {
+                script.name = "Untitled".into();
+            }
+            script.body = script.body.replace("\r\n", "\n").replace('\r', "\n");
         }
     }
 }
@@ -1036,6 +1067,9 @@ mod tests {
         assert!(loaded.pantherbar.excluded_apps.is_empty());
         assert!(loaded.launcher.enabled);
         assert_eq!(loaded.launcher.hotkey, "Win+Space");
+        assert_eq!(loaded.terminal.default_shell, "powershell");
+        assert!(!loaded.terminal.show_scripts);
+        assert!(loaded.terminal.scripts.is_empty());
         assert!(loaded.always_on_top.enabled);
         assert_eq!(loaded.always_on_top.hotkey, "Ctrl+Space");
         assert!(loaded.always_on_top.show_border);

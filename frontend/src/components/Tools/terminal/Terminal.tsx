@@ -1,11 +1,11 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ClipboardCopy, Copy, Eraser, FolderOpen, Minus, Plus, Search, X } from "lucide-react";
+import { ClipboardCopy, Copy, Eraser, FolderOpen, Minus, Plus, ScrollText, Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { TerminalSettings } from "../../../../types/app";
-import type { ShellInfo, ShellKind, TerminalSession } from "../../../../types/terminal";
-import { cn } from "../../lib/cn";
-import { baseName, messageOf, pickedFolderPath } from "../../lib/message";
+import type { TerminalScript, TerminalSettings } from "../../../../../types/app";
+import type { ShellInfo, ShellKind, TerminalSession } from "../../../../../types/terminal";
+import { cn } from "../../../lib/cn";
+import { baseName, messageOf, pickedFolderPath } from "../../../lib/message";
 import {
   terminalKill,
   terminalIsFolder,
@@ -15,17 +15,21 @@ import {
   terminalShells,
   terminalSpawn,
   terminalWrite,
-} from "../../lib/terminal-client";
-import { Button } from "../Button";
-import { PasteDialog } from "./terminal/PasteDialog";
-import { changeDirectory, isMultiline, normalizePaste, pasteChunks, quotePath, type PasteMode } from "./terminal/paste";
-import { TerminalView, type TerminalViewHandle } from "./terminal/TerminalView";
+} from "../../../lib/terminal-client";
+import { Button } from "../../Button";
+import { changeDirectory, quotePath, PasteMode, pasteChunks, isMultiline, normalizePaste } from "./paste";
+import { PasteDialog } from "./PasteDialog";
+import { ScriptsPanel } from "./ScriptsPanel";
+import { TerminalViewHandle, TerminalView } from "./TerminalView";
+
 
 const DEFAULT_SETTINGS: TerminalSettings = {
   defaultShell: "powershell",
   copyOnSelect: false,
   confirmMultilinePaste: true,
   fontSize: 14,
+  showScripts: false,
+  scripts: [],
 };
 
 const LINE_DELAY_MS = 60;
@@ -230,10 +234,30 @@ export function TerminalTool({ active }: Props) {
     void sendPaste(tab, normalizePaste(raw, false), "lines");
   }
 
+  function saveScripts(scripts: TerminalScript[]) {
+    void updateSettings({ scripts });
+  }
+
   const current = tabs.find((tab) => tab.id === activeId) ?? null;
   dropTarget.current = active && current && !current.exited ? current : null;
   const currentView = () => (current ? views.current.get(current.id) : undefined);
   const pasteTab = paste ? tabs.find((tab) => tab.id === paste.tabId) : undefined;
+
+  function runScript(body: string) {
+    if (!current || current.exited) {
+      setError("Open a terminal tab before running a script.");
+      return;
+    }
+    const text = normalizePaste(body, false);
+    if (!text.trim()) {
+      return;
+    }
+    if (isMultiline(text) && settings.confirmMultilinePaste) {
+      setPaste({ text, tabId: current.id });
+      return;
+    }
+    void sendPaste(current, text, "lines");
+  }
 
   return (
     <section id="terminal-tool" className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -402,6 +426,18 @@ export function TerminalTool({ active }: Props) {
             ))}
           </select>
         </label>
+        <span id="terminal-toolbar-divider-3" className="mx-1 h-4 w-px bg-zinc-800" />
+        <Button
+          id="terminal-scripts-toggle"
+          variant={settings.showScripts ? "secondary" : "ghost"}
+          size="xs"
+          aria-pressed={settings.showScripts}
+          title={settings.showScripts ? "Hide saved scripts" : "Show saved scripts"}
+          onClick={() => void updateSettings({ showScripts: !settings.showScripts })}
+        >
+          <ScrollText id="terminal-scripts-toggle-icon" className="size-3.5" aria-hidden="true" />
+          Scripts
+        </Button>
         {notice ? (
           <span id="terminal-notice" className="ml-auto text-xs text-emerald-400">
             {notice}
@@ -413,40 +449,50 @@ export function TerminalTool({ active }: Props) {
           {error}
         </p>
       ) : null}
-      <div id="terminal-views" className="relative flex min-h-0 flex-1 flex-col">
-        {dragOver ? (
-          <div
-            id="terminal-drop-overlay"
-            className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-sky-500 bg-sky-950/40 text-sm text-sky-300"
-          >
-            Drop a folder to go there, or a file to insert its path
-          </div>
-        ) : null}
-        {tabs.map((tab) => (
-          <TerminalView
-            key={tab.id}
-            ref={(handle) => {
-              if (handle) {
-                views.current.set(tab.id, handle);
-              }
-            }}
-            session={tab}
-            active={active && tab.id === activeId}
-            settings={settings}
-            onPaste={(text) => handlePaste(tab, text)}
-            onExit={() => setTabs((list) => list.map((item) => (item.id === tab.id ? { ...item, exited: true } : item)))}
-            onZoom={zoom}
-            onCopied={flash}
+      <div id="terminal-body" className="flex min-h-0 flex-1">
+        <div id="terminal-views" className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          {dragOver ? (
+            <div
+              id="terminal-drop-overlay"
+              className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-sky-500 bg-sky-950/40 text-sm text-sky-300"
+            >
+              Drop a folder to go there, or a file to insert its path
+            </div>
+          ) : null}
+          {tabs.map((tab) => (
+            <TerminalView
+              key={tab.id}
+              ref={(handle) => {
+                if (handle) {
+                  views.current.set(tab.id, handle);
+                }
+              }}
+              session={tab}
+              active={active && tab.id === activeId}
+              settings={settings}
+              onPaste={(text) => handlePaste(tab, text)}
+              onExit={() => setTabs((list) => list.map((item) => (item.id === tab.id ? { ...item, exited: true } : item)))}
+              onZoom={zoom}
+              onCopied={flash}
+            />
+          ))}
+          {tabs.length === 0 ? (
+            <div id="terminal-empty" className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-zinc-500">
+              <p id="terminal-empty-copy">No terminals are open.</p>
+              <Button id="terminal-empty-new" variant="primary" onClick={() => void openTab(newShell, cwd)}>
+                <Plus id="terminal-empty-new-icon" className="size-3.5" aria-hidden="true" />
+                New terminal
+              </Button>
+            </div>
+          ) : null}
+        </div>
+        {settings.showScripts ? (
+          <ScriptsPanel
+            scripts={settings.scripts}
+            canRun={Boolean(current && !current.exited)}
+            onSave={saveScripts}
+            onRun={runScript}
           />
-        ))}
-        {tabs.length === 0 ? (
-          <div id="terminal-empty" className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-zinc-500">
-            <p id="terminal-empty-copy">No terminals are open.</p>
-            <Button id="terminal-empty-new" variant="primary" onClick={() => void openTab(newShell, cwd)}>
-              <Plus id="terminal-empty-new-icon" className="size-3.5" aria-hidden="true" />
-              New terminal
-            </Button>
-          </div>
         ) : null}
       </div>
       {paste && pasteTab ? (

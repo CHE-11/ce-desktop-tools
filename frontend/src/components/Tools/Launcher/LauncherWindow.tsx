@@ -13,20 +13,20 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
-import type { CalcResult } from "../../../../types/calculator";
-import type { LauncherResult } from "../../../../types/launcher";
-import { calculatorEval } from "../../lib/calculator-client";
+import type { CalcResult } from "../../../../../types/calculator";
+import type { LauncherResult } from "../../../../../types/launcher";
+import { calculatorEval } from "../../../lib/calculator-client";
 import {
   displayOf,
   looksLikeCalculation,
   useCalculatorTape,
   withInsertedRef,
   type TapeLine,
-} from "../../lib/calculator-tape";
-import { cn } from "../../lib/cn";
-import { launcherHide, launcherQuery, launcherRun } from "../../lib/launcher-client";
-import { messageOf } from "../../lib/message";
-import { Button } from "../Button";
+} from "../../../lib/calculator-tape";
+import { cn } from "../../../lib/cn";
+import { launcherHide, launcherQuery, launcherRun } from "../../../lib/launcher-client";
+import { messageOf } from "../../../lib/message";
+import { Button } from "../../Button";
 
 const ICONS: Record<string, LucideIcon> = {
   calculator: Calculator,

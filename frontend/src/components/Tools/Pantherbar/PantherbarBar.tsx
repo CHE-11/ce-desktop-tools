@@ -1,9 +1,9 @@
 import { listen } from "@tauri-apps/api/event";
 import { Settings } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { PantherbarAction, PantherbarShow } from "../../../../types/pantherbar";
-import { pantherbarFit, pantherbarRun } from "../../lib/pantherbar-client";
-import { messageOf } from "../../lib/message";
+import type { PantherbarAction, PantherbarShow } from "../../../../../types/pantherbar";
+import { pantherbarFit, pantherbarRun } from "../../../lib/pantherbar-client";
+import { messageOf } from "../../../lib/message";
 import { PantherbarIcon } from "./PantherbarIcon";
 
 export function PantherbarBar() {

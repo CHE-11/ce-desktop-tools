@@ -1,13 +1,13 @@
 import { listen } from "@tauri-apps/api/event";
 import { Check, Copy, Pipette, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import type { ColorDescription, ColorPickerState } from "../../../../types/color-picker";
-import { copyText } from "../../lib/ascii-client";
-import { colorPickerDescribe, colorPickerPick, colorPickerSetHistory, colorPickerState } from "../../lib/color-picker-client";
-import { hexToHsv, hsvToHex, normalizeHex, readableOn, shade, type Hsv } from "../../lib/color";
-import { cn } from "../../lib/cn";
-import { messageOf } from "../../lib/message";
-import { Button } from "../Button";
+import { ColorDescription, ColorPickerState } from "../../../../../types/color-picker";
+import { copyText } from "../../../lib/ascii-client";
+import { cn } from "../../../lib/cn";
+import { Hsv, hexToHsv, hsvToHex, normalizeHex, readableOn, shade } from "../../../lib/color";
+import { colorPickerState, colorPickerDescribe, colorPickerSetHistory, colorPickerPick } from "../../../lib/color-picker-client";
+import { messageOf } from "../../../lib/message";
+import { Button } from "../../Button";
 
 const FALLBACK = "#ffe4b5";
 const SHADES = [-0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6];

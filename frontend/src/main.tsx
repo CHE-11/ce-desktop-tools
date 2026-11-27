@@ -3,13 +3,13 @@ import { createRoot } from "react-dom/client";
 import { applyAppearance, readAppearance } from "./lib/appearance";
 import { installDevConsole } from "./lib/dev-feedback";
 import { applyZoom, readZoom } from "./lib/zoom";
-import { ColorEditorWindow } from "./components/ColorPicker/ColorEditorWindow";
-import { LauncherWindow } from "./components/Launcher/LauncherWindow";
-import { RulerToolbar } from "./components/ScreenRuler/RulerToolbar";
-import { PantherbarBar } from "./components/Tools/PantherbarBar";
+import { LauncherWindow } from "./components/Tools/Launcher/LauncherWindow";
+import { PantherbarBar } from "./components/Tools/Pantherbar/PantherbarBar";
 import { HomePage } from "./Home.page";
 import "./index.css";
 import { applyDensity, readDensity } from "./lib/density";
+import { ColorEditorWindow } from "./components/Tools/ColorPicker/ColorEditorWindow";
+import { RulerToolbar } from "./components/Tools/ScreenRuler/RulerToolbar";
 
 if (import.meta.env.DEV) {
   installDevConsole();

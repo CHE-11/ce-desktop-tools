@@ -11,9 +11,17 @@ export type AppSettings = {
   runAtStartup: boolean;
 };
 
+export type TerminalScript = {
+  id: string;
+  name: string;
+  body: string;
+};
+
 export type TerminalSettings = {
   defaultShell: "cmd" | "powershell" | "pwsh";
   copyOnSelect: boolean;
   confirmMultilinePaste: boolean;
   fontSize: number;
+  showScripts: boolean;
+  scripts: TerminalScript[];
 };

@@ -26,9 +26,11 @@ import {
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { cn } from "../lib/cn";
 import { TOOLS, type ToolId } from "../lib/tools";
-import { RestartExplorer } from "./Actions/RestartExplorer.action";
-import { RunMegaClip } from "./Actions/RunMegaClip.action";
-import { StayAwake } from "./Actions/StayAwake.action";
+import { ColorPickerAction } from "./Tools/Actions/ColorPicker.action";
+import { RestartExplorer } from "./Tools/Actions/RestartExplorer.action";
+import { RunMegaClip } from "./Tools/Actions/RunMegaClip.action";
+import { ScreenRulerAction } from "./Tools/Actions/ScreenRuler.action";
+import { StayAwake } from "./Tools/Actions/StayAwake.action";
 
 const TOOL_ICONS: Record<ToolId, LucideIcon> = {
   expansion: Type,
@@ -297,6 +299,8 @@ export function AppSidebar({ tool, locked, lockSeconds, onSelect }: AppSidebarPr
 
         <div id="app-actions" aria-label="Actions" className="flex shrink-0 flex-col gap-2 border-t border-zinc-800 px-2 py-2">
           <StayAwake />
+          <ColorPickerAction />
+          <ScreenRulerAction />
           <RunMegaClip />
           <RestartExplorer />
         </div>

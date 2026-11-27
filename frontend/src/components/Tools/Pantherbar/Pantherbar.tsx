@@ -1,12 +1,12 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { GripVertical, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import type { PantherbarSave, PantherbarState } from "../../../../types/pantherbar";
-import { hotkeyName } from "../../lib/hotkey";
-import { pantherbarSave, pantherbarState } from "../../lib/pantherbar-client";
-import { cn } from "../../lib/cn";
-import { messageOf } from "../../lib/message";
-import { Button } from "../Button";
+import type { PantherbarSave, PantherbarState } from "../../../../../types/pantherbar";
+import { hotkeyName } from "../../../lib/hotkey";
+import { pantherbarSave, pantherbarState } from "../../../lib/pantherbar-client";
+import { cn } from "../../../lib/cn";
+import { messageOf } from "../../../lib/message";
+import { Button } from "../../Button";
 import { PantherbarIcon } from "./PantherbarIcon";
 
 const GROUPS = [

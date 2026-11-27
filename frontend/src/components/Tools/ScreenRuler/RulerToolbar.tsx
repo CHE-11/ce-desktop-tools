@@ -1,9 +1,9 @@
 import { listen } from "@tauri-apps/api/event";
 import { MoveHorizontal, MoveVertical, Scan, SquareDashed, X, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { MeasureStyle } from "../../../../types/screen-ruler";
-import { cn } from "../../lib/cn";
-import { screenRulerClose, screenRulerMeasure, screenRulerStyle } from "../../lib/screen-ruler-client";
+import { MeasureStyle } from "../../../../../types/screen-ruler";
+import { cn } from "../../../lib/cn";
+import { screenRulerStyle, screenRulerClose, screenRulerMeasure } from "../../../lib/screen-ruler-client";
 
 const MODES: { id: Exclude<MeasureStyle, "none">; label: string; icon: LucideIcon }[] = [
   { id: "bounds", label: "Bounds", icon: SquareDashed },

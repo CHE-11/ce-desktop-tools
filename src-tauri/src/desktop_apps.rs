@@ -45,19 +45,19 @@ pub fn list() -> Result<Vec<DesktopApp>, String> {
 }
 
 pub fn add(name: &str, app_id: &str) -> Result<String, String> {
-    if !valid_app_id(app_id) {
-        return Err("That app is not in the Start menu list.".into());
+    let name = name.trim();
+    let app_id = app_id.trim();
+    if name.is_empty() {
+        return Err("That app has no name.".into());
     }
-    let apps = apps_or_refresh()?;
-    let Some(app) = apps
-        .iter()
-        .find(|app| app.app_id == app_id && app.name == name)
-    else {
-        return Err("That app is not in the Start menu list.".into());
-    };
-    let path = shortcut_path(&desktop_dir()?, &app.name);
+    if !valid_app_id(app_id) {
+        return Err("That app has no launch id.".into());
+    }
+    // Use the name and AppID the UI already resolved. Do not require a second
+    // Start menu hit — path-style AppIDs and stale cache rows still work.
+    let path = shortcut_path(&desktop_dir()?, name);
     if !path.exists() {
-        write_shortcut(&path, &app.name, &app.app_id)?;
+        write_shortcut(&path, name, app_id)?;
     }
     Ok(path.display().to_string())
 }
@@ -109,10 +109,11 @@ fn reserved(name: &str) -> bool {
 }
 
 fn valid_app_id(app_id: &str) -> bool {
+    // Desktop AppIDs often look like `{GUID}\Vendor\App\app.exe`.
     !app_id.is_empty()
         && app_id
             .chars()
-            .all(|ch| !ch.is_control() && ch != '"' && ch != '\\')
+            .all(|ch| !ch.is_control() && ch != '"')
 }
 
 #[cfg(windows)]
@@ -215,7 +216,7 @@ fn write_shortcut(_path: &Path, _name: &str, _app_id: &str) -> Result<(), String
 
 #[cfg(test)]
 mod tests {
-    use super::shortcut_file_name;
+    use super::{shortcut_file_name, valid_app_id};
 
     #[test]
     fn cleans_a_file_name() {
@@ -224,6 +225,18 @@ mod tests {
         assert_eq!(shortcut_file_name("CON"), "CON app");
         assert_eq!(shortcut_file_name("COM1"), "COM1 app");
         assert_eq!(shortcut_file_name("Notes"), "Notes");
+    }
+
+    #[test]
+    fn accepts_path_style_app_ids() {
+        assert!(valid_app_id(
+            "{6D809377-6AF0-444B-8957-A3773F02200E}\\Google\\Chrome\\Application\\chrome.exe"
+        ));
+        assert!(valid_app_id("Microsoft.WindowsNotepad_8wekyb3d8bbwe!App"));
+        assert!(valid_app_id("Chrome"));
+        assert!(!valid_app_id(""));
+        assert!(!valid_app_id("bad\"id"));
+        assert!(!valid_app_id("bad\nid"));
     }
 
     #[cfg(windows)]

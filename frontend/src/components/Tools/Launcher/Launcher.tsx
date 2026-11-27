@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import type { LauncherSave, LauncherState } from "../../../../types/launcher";
-import { launcherRefreshApps, launcherSave, launcherState } from "../../lib/launcher-client";
-import { messageOf } from "../../lib/message";
-import { Button } from "../Button";
-import { HotkeyField } from "../HotkeyField";
+import { LauncherState, LauncherSave } from "../../../../../types/launcher";
+import { launcherState, launcherSave, launcherRefreshApps } from "../../../lib/launcher-client";
+import { messageOf } from "../../../lib/message";
+import { Button } from "../../Button";
+import { HotkeyField } from "../../HotkeyField";
+
 
 const EXAMPLES = [
   { id: "app", query: "chrome", detail: "Opens a Start menu app or Store app." },

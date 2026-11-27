@@ -1,9 +1,9 @@
 import { listen } from "@tauri-apps/api/event";
 import { Coffee } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { messageOf } from "../../lib/message";
-import { setStayAwake, stayAwakeState } from "../../lib/stay-awake-client";
-import { Button } from "../Button";
+import { messageOf } from "../../../lib/message";
+import { setStayAwake, stayAwakeState } from "../../../lib/stay-awake-client";
+import { Button } from "../../Button";
 
 export function StayAwake() {
   const [on, setOn] = useState(false);

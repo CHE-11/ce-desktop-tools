@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { megaclipRunning, runMegaClip, stopMegaClip } from "../../lib/megaclip-client";
-import { messageOf } from "../../lib/message";
-import { Button } from "../Button";
+import { megaclipRunning, runMegaClip, stopMegaClip } from "../../../lib/megaclip-client";
+import { messageOf } from "../../../lib/message";
+import { Button } from "../../Button";
 import { Pause, Play } from "lucide-react";
 
 export function RunMegaClip() {

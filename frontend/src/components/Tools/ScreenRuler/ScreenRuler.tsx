@@ -1,11 +1,12 @@
-import type { ExtraUnits, MeasureStyle, ScreenRulerSettings } from "../../../../types/screen-ruler";
-import { screenRulerOpen, screenRulerSave, screenRulerState } from "../../lib/screen-ruler-client";
-import { messageOf } from "../../lib/message";
-import { useSettingsSection } from "../../lib/use-settings-section";
-import { Button } from "../Button";
-import { HotkeyField } from "../HotkeyField";
-import { SETTING_RANGE, SETTING_SELECT, SettingGroup, SettingRow } from "../SettingRow";
-import { Switch } from "../Switch";
+import { MeasureStyle, ExtraUnits, ScreenRulerSettings } from "../../../../../types/screen-ruler";
+import { messageOf } from "../../../lib/message";
+import { screenRulerState, screenRulerSave, screenRulerOpen } from "../../../lib/screen-ruler-client";
+import { useSettingsSection } from "../../../lib/use-settings-section";
+import { Button } from "../../Button";
+import { HotkeyField } from "../../HotkeyField";
+import { SettingGroup, SettingRow, SETTING_SELECT, SETTING_RANGE } from "../../SettingRow";
+import { Switch } from "../../Switch";
+
 
 const SLIDER_DELAY = 300;
 const DEFAULT_HOTKEY = "Ctrl+Shift+Win+M";

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
-import { restartExplorer } from "../../lib/explorer-client";
-import { messageOf } from "../../lib/message";
-import { Button } from "../Button";
+import { restartExplorer } from "../../../lib/explorer-client";
+import { messageOf } from "../../../lib/message";
+import { Button } from "../../Button";
 
 export function RestartExplorer() {
   const [restarting, setRestarting] = useState(false);

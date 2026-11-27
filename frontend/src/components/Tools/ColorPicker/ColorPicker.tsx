@@ -1,15 +1,16 @@
 import { listen } from "@tauri-apps/api/event";
 import { ArrowDown, ArrowUp, Pencil, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import type { ActivationBehavior, ColorFormat, ColorPickerState } from "../../../../types/color-picker";
-import { colorPickerDescribe, colorPickerOpenEditor, colorPickerPick, colorPickerSave, colorPickerState } from "../../lib/color-picker-client";
-import { messageOf } from "../../lib/message";
-import { useSettingsSection } from "../../lib/use-settings-section";
-import { Button } from "../Button";
-import { ColorFormatDialog } from "../Dialogs/ColorFormatDialog";
-import { HotkeyField } from "../HotkeyField";
-import { SETTING_SELECT, SettingGroup, SettingRow } from "../SettingRow";
-import { Switch } from "../Switch";
+import { useState, useEffect } from "react";
+import { ActivationBehavior, ColorPickerState, ColorFormat } from "../../../../../types/color-picker";
+import { colorPickerState, colorPickerSave, colorPickerDescribe, colorPickerPick, colorPickerOpenEditor } from "../../../lib/color-picker-client";
+import { messageOf } from "../../../lib/message";
+import { useSettingsSection } from "../../../lib/use-settings-section";
+import { Button } from "../../Button";
+import { ColorFormatDialog } from "../../Dialogs/ColorFormatDialog";
+import { HotkeyField } from "../../HotkeyField";
+import { SettingGroup, SettingRow, SETTING_SELECT } from "../../SettingRow";
+import { Switch } from "../../Switch";
+
 
 const DEFAULT_HOTKEY = "Shift+Win+C";
 const SAMPLE = "#ffe4b5";
