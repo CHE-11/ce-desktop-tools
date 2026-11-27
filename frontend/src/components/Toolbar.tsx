@@ -1,10 +1,9 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Lock, Maximize, Minimize, Pause, Pin, Play, Settings, Unlock, X } from "lucide-react";
 import type { MouseEvent } from "react";
-import { launcherShow } from "../../lib/launcher-client";
-import { Button } from "../Button";
-import { Kbd } from "../Kbd";
-import { StylesMenu } from "./StylesMenu";
+import { launcherShow } from "../lib/launcher-client";
+import { Button } from "./Button";
+import { Kbd } from "./Kbd";
 
 type ToolbarProps = {
   labels: boolean;
@@ -44,7 +43,7 @@ export function Toolbar({ labels, enabled, pinned, canLock, onToggleExpansion, o
       <Button
         id="toolbar-launcher"
         variant="ghost"
-        className="flex flex-col justify-center items-center gap-0.5 min-h-fit py-0.5"
+        className="flex flex-col justify-center items-center gap-0.5 min-h-fit py-0.5 mt-[3px]"
         title="Open the launcher"
         onClick={() => void launcherShow()}
       >
@@ -90,8 +89,6 @@ export function Toolbar({ labels, enabled, pinned, canLock, onToggleExpansion, o
           </Button>
         )}
     
-        <StylesMenu labels={labels} />
-
         <Button id="toolbar-settings" variant="ghost" size="sm" title="Settings" onClick={onSettings}>
           <Settings id="toolbar-settings-icon" className="size-4" aria-hidden="true" />
           {labels ? <span id="toolbar-settings-label">Settings</span> : null}

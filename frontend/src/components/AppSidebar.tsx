@@ -3,7 +3,6 @@ import {
   Binary,
   CalendarClock,
   Calculator,
-  Ruler,
   Cat,
   Clipboard,
   FileCog,
@@ -14,6 +13,9 @@ import {
   Keyboard,
   MonitorDown,
   Lock,
+  Pin,
+  Pipette,
+  RulerDimensionLine,
   Search,
   SpellCheck,
   SquareTerminal,
@@ -26,6 +28,7 @@ import { cn } from "../lib/cn";
 import { TOOLS, type ToolId } from "../lib/tools";
 import { RestartExplorer } from "./Actions/RestartExplorer.action";
 import { RunMegaClip } from "./Actions/RunMegaClip.action";
+import { StayAwake } from "./Actions/StayAwake.action";
 
 const TOOL_ICONS: Record<ToolId, LucideIcon> = {
   expansion: Type,
@@ -33,7 +36,6 @@ const TOOL_ICONS: Record<ToolId, LucideIcon> = {
   misspell: SpellCheck,
   date: CalendarClock,
   ascii: Binary,
-  units: Ruler,
   calculator: Calculator,
   "app-shortcuts": Keyboard,
   rename: FilePen,
@@ -46,7 +48,17 @@ const TOOL_ICONS: Record<ToolId, LucideIcon> = {
   "add-to-desktop": MonitorDown,
   "file-associations": FileCog,
   terminal: SquareTerminal,
+  "always-on-top": Pin,
+  "screen-ruler": RulerDimensionLine,
+  "color-picker": Pipette,
 };
+
+const EXPANSION_CHILD_IDS = ["misspell", "date", "ascii"] as const satisfies readonly ToolId[];
+const EXPANSION_CHILD_ID_SET = new Set<ToolId>(EXPANSION_CHILD_IDS);
+
+function isExpansionGroup(tool: ToolId) {
+  return tool === "expansion" || EXPANSION_CHILD_ID_SET.has(tool);
+}
 
 const SIDEBAR_WIDTH_KEY = "ce-desktop-tools.sidebar-width";
 const DEFAULT_WIDTH = 224;
@@ -185,57 +197,106 @@ export function AppSidebar({ tool, locked, lockSeconds, onSelect }: AppSidebarPr
     <div id="app-sidebar-shell" style={{ width }} className="relative z-10 flex shrink-0">
       <aside id="app-sidebar" className="flex min-h-0 min-w-0 flex-1 flex-col justify-between border-r border-zinc-800 bg-zinc-900">
         <nav id="app-menu" aria-label="Pages" className="flex min-h-0 flex-col gap-0.5 overflow-y-auto px-2 pt-2">
-          {TOOLS.map((entry) => {
+          {TOOLS.filter((entry) => !EXPANSION_CHILD_ID_SET.has(entry.id)).map((entry) => {
             const selected = tool === entry.id;
             const Icon = TOOL_ICONS[entry.id];
+            const expansionOpen = entry.id === "expansion" && isExpansionGroup(tool);
+            const expansionChildren = expansionOpen
+              ? TOOLS.filter((child) => EXPANSION_CHILD_ID_SET.has(child.id))
+              : [];
+
             return (
-              <button
-                id={`app-menu-${entry.id}`}
-                key={entry.id}
-                type="button"
-                aria-current={selected ? "page" : undefined}
-                onClick={() => onSelect(entry.id)}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2.5 py-1 text-left text-xs",
-                  selected ? "bg-zinc-800 font-medium text-zinc-100" : "text-zinc-300 hover:bg-zinc-800",
-                )}
-              >
-                <Icon id={`app-menu-${entry.id}-icon`} className="size-4 shrink-0" aria-hidden="true" />
-                <span id={`app-menu-${entry.id}-label`} className="min-w-0 flex-1 truncate">
-                  {entry.label}
-                </span>
-                {entry.lockable ? (
-                  locked ? (
-                    <Lock
-                      id={`app-menu-${entry.id}-lock`}
-                      className="size-3.5 shrink-0 text-amber-300"
-                      aria-label="Locked"
-                    />
-                  ) : (
-                    <>
-                      {lockMinutes != null ? (
-                        <span
-                          id={`app-menu-${entry.id}-lock-minutes`}
-                          className="shrink-0 text-xs tabular-nums text-zinc-400"
-                          title={`${lockMinutes} minutes until the vault locks`}
-                        >
-                          {lockMinutes} min
-                        </span>
-                      ) : null}
-                      <Unlock
+              <div id={`app-menu-${entry.id}-group`} key={entry.id} className="flex flex-col gap-0.5">
+                <button
+                  id={`app-menu-${entry.id}`}
+                  type="button"
+                  aria-current={selected ? "page" : undefined}
+                  aria-expanded={entry.id === "expansion" ? expansionOpen : undefined}
+                  onClick={() => onSelect(entry.id)}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1 text-left text-xs",
+                    selected
+                      ? "bg-zinc-800 font-medium text-zinc-100"
+                      : entry.id === "expansion" && expansionOpen
+                        ? "text-zinc-100 hover:bg-zinc-800"
+                        : "text-zinc-300 hover:bg-zinc-800",
+                  )}
+                >
+                  <Icon id={`app-menu-${entry.id}-icon`} className="size-4 shrink-0" aria-hidden="true" />
+                  <span id={`app-menu-${entry.id}-label`} className="min-w-0 flex-1 truncate">
+                    {entry.label}
+                  </span>
+                  {entry.lockable ? (
+                    locked ? (
+                      <Lock
                         id={`app-menu-${entry.id}-lock`}
-                        className="size-3.5 shrink-0 text-zinc-500"
-                        aria-label="Unlocked"
+                        className="size-3.5 shrink-0 text-amber-300"
+                        aria-label="Locked"
                       />
-                    </>
-                  )
+                    ) : (
+                      <>
+                        {lockMinutes != null ? (
+                          <span
+                            id={`app-menu-${entry.id}-lock-minutes`}
+                            className="shrink-0 text-xs tabular-nums text-zinc-400"
+                            title={`${lockMinutes} minutes until the vault locks`}
+                          >
+                            {lockMinutes} min
+                          </span>
+                        ) : null}
+                        <Unlock
+                          id={`app-menu-${entry.id}-lock`}
+                          className="size-3.5 shrink-0 text-zinc-500"
+                          aria-label="Unlocked"
+                        />
+                      </>
+                    )
+                  ) : null}
+                </button>
+                {expansionChildren.length > 0 ? (
+                  <div
+                    id="app-menu-expansion-children"
+                    role="group"
+                    aria-label="Text Expansion tools"
+                    className="flex flex-col gap-0.5 border-l border-zinc-700 ml-4 pl-1.5"
+                  >
+                    {expansionChildren.map((child) => {
+                      const childSelected = tool === child.id;
+                      const ChildIcon = TOOL_ICONS[child.id];
+                      return (
+                        <button
+                          id={`app-menu-${child.id}`}
+                          key={child.id}
+                          type="button"
+                          aria-current={childSelected ? "page" : undefined}
+                          onClick={() => onSelect(child.id)}
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-md px-2.5 py-1 text-left text-xs",
+                            childSelected
+                              ? "bg-zinc-800 font-medium text-zinc-100"
+                              : "text-zinc-300 hover:bg-zinc-800",
+                          )}
+                        >
+                          <ChildIcon
+                            id={`app-menu-${child.id}-icon`}
+                            className="size-4 shrink-0"
+                            aria-hidden="true"
+                          />
+                          <span id={`app-menu-${child.id}-label`} className="min-w-0 flex-1 truncate">
+                            {child.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 ) : null}
-              </button>
+              </div>
             );
           })}
         </nav>
 
         <div id="app-actions" aria-label="Actions" className="flex shrink-0 flex-col gap-2 border-t border-zinc-800 px-2 py-2">
+          <StayAwake />
           <RunMegaClip />
           <RestartExplorer />
         </div>

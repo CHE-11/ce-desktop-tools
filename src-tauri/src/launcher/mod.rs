@@ -8,7 +8,6 @@ pub mod apps;
 pub mod calc;
 pub mod calculator;
 mod fuzzy;
-mod hook;
 pub mod units;
 
 use std::sync::Mutex;
@@ -16,6 +15,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
+
+use crate::hotkeys::{HotkeyId, usable_hotkey};
 
 pub const DEFAULT_HOTKEY: &str = "Win+Space";
 const WINDOW_LABEL: &str = "launcher";
@@ -46,12 +47,6 @@ impl LauncherFile {
     pub fn normalize(&mut self) {
         self.hotkey = usable_hotkey(&self.hotkey).unwrap_or_else(|| DEFAULT_HOTKEY.into());
     }
-}
-
-/// The launcher needs a modifier. A bare letter would fire while typing.
-fn usable_hotkey(value: &str) -> Option<String> {
-    let chord = crate::pantherbar::parse_hotkey(value)?;
-    (chord.ctrl || chord.alt || chord.win).then(|| chord.label())
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -124,14 +119,9 @@ const TOOLS: &[Entry] = &[
         keywords: "symbols",
     },
     Entry {
-        id: "units",
-        title: "Units",
-        keywords: "convert units calculate math",
-    },
-    Entry {
         id: "calculator",
-        title: "Calculator",
-        keywords: "calculate math tape units",
+        title: "Calculator & Units",
+        keywords: "calculate math tape convert units",
     },
     Entry {
         id: "app-shortcuts",
@@ -188,6 +178,21 @@ const TOOLS: &[Entry] = &[
         title: "Terminal",
         keywords: "cmd powershell console shell command prompt",
     },
+    Entry {
+        id: "always-on-top",
+        title: "Always On Top",
+        keywords: "pin window topmost border",
+    },
+    Entry {
+        id: "screen-ruler",
+        title: "Screen Ruler",
+        keywords: "measure pixels distance",
+    },
+    Entry {
+        id: "color-picker",
+        title: "Color Picker",
+        keywords: "eyedropper hex rgb colour",
+    },
 ];
 
 const ACTIONS: &[Entry] = &[
@@ -221,6 +226,31 @@ const ACTIONS: &[Entry] = &[
         title: "Run folder rules now",
         keywords: "rules run sort downloads",
     },
+    Entry {
+        id: "toggle-stay-awake",
+        title: "Stay awake on or off",
+        keywords: "awake sleep caffeine keep screen on",
+    },
+    Entry {
+        id: "screen-ruler",
+        title: "Measure the screen",
+        keywords: "ruler pixels",
+    },
+    Entry {
+        id: "color-pick",
+        title: "Pick a color",
+        keywords: "eyedropper color picker",
+    },
+    Entry {
+        id: "color-editor",
+        title: "Open the color editor",
+        keywords: "color picker history",
+    },
+    Entry {
+        id: "unpin-all",
+        title: "Unpin all windows",
+        keywords: "always on top",
+    },
 ];
 
 pub struct Launcher {
@@ -235,8 +265,7 @@ impl Launcher {
         if let Err(error) = ensure_window(&app) {
             eprintln!("ce-desktop-tools launcher window did not open: {error}");
         }
-        hook::publish(file.enabled, &file.hotkey);
-        hook::spawn(app.clone());
+        crate::hotkeys::publish(HotkeyId::Launcher, file.enabled, &file.hotkey);
         apps::start_indexing();
         Self {
             app,
@@ -256,12 +285,15 @@ impl Launcher {
     pub fn save(&self, save: LauncherSave) -> Result<LauncherState, String> {
         let hotkey = usable_hotkey(&save.hotkey)
             .ok_or_else(|| "Pick a shortcut that uses Ctrl, Alt, or Win.".to_string())?;
+        if save.enabled {
+            crate::hotkeys::check_free(HotkeyId::Launcher, &hotkey)?;
+        }
         let next = LauncherFile {
             enabled: save.enabled,
             hotkey,
         };
         let saved = crate::app_settings::save_launcher(&self.app, next)?;
-        hook::publish(saved.enabled, &saved.hotkey);
+        crate::hotkeys::publish(HotkeyId::Launcher, saved.enabled, &saved.hotkey);
         if let Ok(mut slot) = self.file.lock() {
             *slot = saved;
         }
@@ -272,7 +304,7 @@ impl Launcher {
     pub fn reload(&self) {
         if let Ok(mut file) = crate::app_settings::load_launcher(&self.app) {
             file.normalize();
-            hook::publish(file.enabled, &file.hotkey);
+            crate::hotkeys::publish(HotkeyId::Launcher, file.enabled, &file.hotkey);
             if let Ok(mut slot) = self.file.lock() {
                 *slot = file;
             }
@@ -548,6 +580,38 @@ fn run_action(app: &AppHandle, id: &str) -> Result<Option<String>, String> {
                 1 => "Folder rules handled 1 file.".into(),
                 count => format!("Folder rules handled {count} files."),
             }))
+        }
+        "toggle-stay-awake" => {
+            let on = crate::stay_awake::toggle(app)?;
+            Ok(Some(if on {
+                "Stay Awake is on.".into()
+            } else {
+                "Stay Awake is off.".into()
+            }))
+        }
+        "screen-ruler" => {
+            hide(app);
+            crate::screen_ruler::open(app);
+            Ok(None)
+        }
+        "color-pick" => {
+            hide(app);
+            let app = app.clone();
+            std::thread::spawn(move || {
+                // Let the launcher leave the screen before the capture.
+                std::thread::sleep(std::time::Duration::from_millis(150));
+                crate::color_picker::hotkey_pick(&app);
+            });
+            Ok(None)
+        }
+        "color-editor" => {
+            hide(app);
+            crate::color_picker::open_editor(app);
+            Ok(None)
+        }
+        "unpin-all" => {
+            crate::always_on_top::unpin_all();
+            Ok(Some("Every pinned window is unpinned.".into()))
         }
         _ => Err("That action is not available.".into()),
     }

@@ -1,8 +1,10 @@
+mod always_on_top;
 mod app_calls;
 mod app_settings;
 mod app_shortcuts;
 mod ascii;
 mod clipboard;
+mod color_picker;
 mod date_expand;
 mod desktop_app_details;
 mod desktop_apps;
@@ -12,14 +14,19 @@ mod expansion;
 mod explorer_restart;
 mod file_associations;
 mod folder_rules;
+mod hotkeys;
 mod launcher;
 mod megaclip_script;
 mod misspell;
+mod overlay;
 mod pantherbar;
 mod paste_plain;
 mod processes;
 mod rename;
+mod screen_capture;
+mod screen_ruler;
 mod startup;
+mod stay_awake;
 mod taskbar;
 mod terminal;
 mod update;
@@ -45,6 +52,7 @@ fn save_app_settings(
     app: tauri::AppHandle,
     settings_folder: String,
     font_zoom: u32,
+    density: String,
     theme: String,
     color_mode: String,
     toolbar_labels: bool,
@@ -54,6 +62,7 @@ fn save_app_settings(
         &app,
         settings_folder,
         font_zoom,
+        density,
         theme,
         color_mode,
         toolbar_labels,
@@ -69,7 +78,132 @@ fn save_app_settings(
     if let Some(rules) = app.try_state::<folder_rules::FolderRules>() {
         rules.reload();
     }
+    if let Some(pin) = app.try_state::<always_on_top::AlwaysOnTop>() {
+        pin.reload();
+    }
+    if let Some(ruler) = app.try_state::<screen_ruler::ScreenRuler>() {
+        ruler.reload();
+    }
+    if let Some(picker) = app.try_state::<color_picker::ColorPicker>() {
+        picker.reload();
+    }
     Ok(saved)
+}
+
+#[tauri::command]
+fn hotkeys_recording(on: bool) {
+    hotkeys::set_recording(on);
+}
+
+#[tauri::command]
+fn stay_awake_state() -> bool {
+    stay_awake::is_on()
+}
+
+#[tauri::command]
+fn set_stay_awake(app: tauri::AppHandle, on: bool) -> Result<bool, String> {
+    stay_awake::set(&app, on)
+}
+
+#[tauri::command]
+fn always_on_top_state(
+    pin: tauri::State<'_, always_on_top::AlwaysOnTop>,
+) -> always_on_top::AlwaysOnTopState {
+    pin.state()
+}
+
+#[tauri::command]
+fn always_on_top_save(
+    pin: tauri::State<'_, always_on_top::AlwaysOnTop>,
+    settings: always_on_top::AlwaysOnTopFile,
+) -> Result<always_on_top::AlwaysOnTopState, String> {
+    pin.save(settings)
+}
+
+#[tauri::command]
+fn always_on_top_unpin_all(
+    pin: tauri::State<'_, always_on_top::AlwaysOnTop>,
+) -> always_on_top::AlwaysOnTopState {
+    always_on_top::unpin_all();
+    pin.state()
+}
+
+#[tauri::command]
+fn screen_ruler_state(
+    ruler: tauri::State<'_, screen_ruler::ScreenRuler>,
+) -> screen_ruler::ScreenRulerFile {
+    ruler.state()
+}
+
+#[tauri::command]
+fn screen_ruler_save(
+    ruler: tauri::State<'_, screen_ruler::ScreenRuler>,
+    settings: screen_ruler::ScreenRulerFile,
+) -> Result<screen_ruler::ScreenRulerFile, String> {
+    ruler.save(settings)
+}
+
+#[tauri::command]
+fn screen_ruler_style() -> String {
+    screen_ruler::style()
+}
+
+#[tauri::command]
+fn screen_ruler_measure(app: tauri::AppHandle, style: String) {
+    screen_ruler::measure(&app, &style);
+}
+
+#[tauri::command]
+async fn screen_ruler_open(app: tauri::AppHandle) {
+    let _ = tauri::async_runtime::spawn_blocking(move || screen_ruler::open(&app)).await;
+}
+
+#[tauri::command]
+fn screen_ruler_close(app: tauri::AppHandle) {
+    screen_ruler::close(&app);
+}
+
+#[tauri::command]
+fn color_picker_state(
+    picker: tauri::State<'_, color_picker::ColorPicker>,
+) -> color_picker::ColorPickerState {
+    picker.state()
+}
+
+#[tauri::command]
+fn color_picker_save(
+    picker: tauri::State<'_, color_picker::ColorPicker>,
+    settings: color_picker::ColorPickerFile,
+) -> Result<color_picker::ColorPickerState, String> {
+    picker.save(settings)
+}
+
+#[tauri::command]
+fn color_picker_describe(color: String) -> Result<color_picker::ColorDescription, String> {
+    color_picker::describe(&color)
+}
+
+#[tauri::command]
+fn color_picker_render(template: String, color: String) -> Result<String, String> {
+    color_picker::render(&template, &color)
+}
+
+#[tauri::command]
+fn color_picker_set_history(
+    app: tauri::AppHandle,
+    history: Vec<String>,
+) -> Result<Vec<String>, String> {
+    color_picker::set_history(&app, history)
+}
+
+#[tauri::command]
+fn color_picker_pick(app: tauri::AppHandle) {
+    color_picker::pick_from_editor(&app);
+}
+
+#[tauri::command]
+async fn color_picker_open_editor(app: tauri::AppHandle) {
+    let _ = tauri::async_runtime::spawn_blocking(move || color_picker::open_editor(&app)).await;
 }
 
 #[tauri::command]
@@ -722,11 +856,14 @@ pub fn run() {
 
             let show = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
             let pause = MenuItem::with_id(app, "pause", "Pause expansion", true, None::<&str>)?;
+            let awake =
+                MenuItem::with_id(app, "stay-awake", "Stay awake: off", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &pause, &quit])?;
+            let menu = Menu::with_items(app, &[&show, &pause, &awake, &quit])?;
             if let Some(expansion) = app.try_state::<Expansion>() {
                 expansion.set_pause_item(pause);
             }
+            stay_awake::set_tray_item(awake);
             let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png"))?;
             TrayIconBuilder::with_id("tray")
                 .icon(tray_icon)
@@ -738,6 +875,11 @@ pub fn run() {
                     "pause" => {
                         if let Some(expansion) = app.try_state::<Expansion>() {
                             expansion.toggle_enabled();
+                        }
+                    }
+                    "stay-awake" => {
+                        if let Err(error) = stay_awake::toggle(app) {
+                            eprintln!("ce-desktop-tools Stay Awake did not change: {error}");
                         }
                     }
                     "quit" => {
@@ -777,6 +919,10 @@ pub fn run() {
                 .map_err(std::io::Error::other)?;
             app.manage(pantherbar);
             app.manage(launcher::Launcher::start(app.handle().clone()));
+            app.manage(always_on_top::AlwaysOnTop::start(app.handle().clone()));
+            app.manage(screen_ruler::ScreenRuler::start(app.handle().clone()));
+            app.manage(color_picker::ColorPicker::start(app.handle().clone()));
+            hotkeys::spawn(app.handle().clone());
             app.manage(folder_rules::FolderRules::start(app.handle().clone()));
             app.manage(terminal::Terminals::default());
             if let Ok(settings) = app_settings::app_settings(app.handle()) {
@@ -854,6 +1000,25 @@ pub fn run() {
             launcher_hide,
             launcher_show,
             launcher_refresh_apps,
+            hotkeys_recording,
+            stay_awake_state,
+            set_stay_awake,
+            always_on_top_state,
+            always_on_top_save,
+            always_on_top_unpin_all,
+            screen_ruler_state,
+            screen_ruler_save,
+            screen_ruler_style,
+            screen_ruler_measure,
+            screen_ruler_open,
+            screen_ruler_close,
+            color_picker_state,
+            color_picker_save,
+            color_picker_describe,
+            color_picker_render,
+            color_picker_set_history,
+            color_picker_pick,
+            color_picker_open_editor,
             desktop_apps,
             desktop_app_add,
             folder_rules_state,
@@ -895,6 +1060,8 @@ pub fn run() {
                 if let Some(terminals) = app.try_state::<terminal::Terminals>() {
                     terminals.kill_all();
                 }
+                always_on_top::unpin_all();
+                let _ = stay_awake::set(app, false);
                 #[cfg(debug_assertions)]
                 dev_feedback::clear_port_file();
             }

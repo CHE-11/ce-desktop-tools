@@ -7,18 +7,20 @@ import { AppSidebar } from "./components/AppSidebar";
 import { SettingsDialog } from "./components/Dialogs/Settings/SettingsDialog";
 import { UpdateDialog } from "./components/Dialogs/UpdateDialog";
 import { StatusBar } from "./components/StatusBar";
-import { Toolbar } from "./components/Toolbar/Toolbar";
+import { Toolbar } from "./components/Toolbar";
 import { TextExpansion } from "./components/Tools/TextExpansion";
 import { CommonMisspells } from "./components/Tools/CommonMisspells";
 import { DateExpander } from "./components/Tools/DateExpander";
 import { AsciiCodes } from "./components/Tools/AsciiCodes";
-import { UnitsConverter } from "./components/Tools/UnitsConverter";
-import { Calculator } from "./components/Tools/Calculator";
+import { CalculatorUnits } from "./components/Tools/CalculatorUnits";
 import { Clipboard } from "./components/Tools/Clipboard";
 import { KeyboardShortcuts } from "./components/Tools/KeyboardShortcuts";
 import { BatchRename } from "./components/Tools/BatchRename";
 import { Pantherbar } from "./components/Tools/Pantherbar";
+import { AlwaysOnTop } from "./components/Tools/AlwaysOnTop";
+import { ColorPicker } from "./components/Tools/ColorPicker";
 import { Launcher } from "./components/Tools/Launcher";
+import { ScreenRuler } from "./components/Tools/ScreenRuler";
 import { FolderRules } from "./components/Tools/FolderRules";
 import { Processes } from "./components/Tools/Processes";
 import { AppCalls } from "./components/Tools/AppCalls";
@@ -139,8 +141,9 @@ export function HomePage() {
         setTool("pantherbar");
       }),
       listen<string>("launcher-open-tool", (event) => {
-        if (isToolId(event.payload)) {
-          setTool(event.payload);
+        const id = event.payload === "units" ? "calculator" : event.payload;
+        if (isToolId(id)) {
+          setTool(id);
         }
       }),
       listen<boolean>("always-on-top", (event) => {
@@ -322,8 +325,7 @@ export function HomePage() {
           {tool === "misspell" ? <CommonMisspells onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "date" ? <DateExpander onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "ascii" ? <AsciiCodes onOpenSettings={() => setSettingsOpen(true)} /> : null}
-          {tool === "units" ? <UnitsConverter /> : null}
-          {tool === "calculator" ? <Calculator /> : null}
+          {tool === "calculator" ? <CalculatorUnits /> : null}
           {tool === "clipboard" ? (
             <Clipboard
               settingsFolder={expansion.settingsFolder}
@@ -341,6 +343,9 @@ export function HomePage() {
           {tool === "rename" ? <BatchRename /> : null}
           {tool === "pantherbar" ? <Pantherbar /> : null}
           {tool === "launcher" ? <Launcher /> : null}
+          {tool === "always-on-top" ? <AlwaysOnTop /> : null}
+          {tool === "screen-ruler" ? <ScreenRuler /> : null}
+          {tool === "color-picker" ? <ColorPicker /> : null}
           {tool === "folder-rules" ? <FolderRules onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "processes" ? <Processes /> : null}
           {tool === "network-explorer" ? <AppCalls /> : null}

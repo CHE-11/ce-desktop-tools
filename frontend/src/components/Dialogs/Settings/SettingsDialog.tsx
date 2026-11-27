@@ -11,14 +11,15 @@ import {
   type ThemeId,
 } from "../../../lib/appearance";
 import { appExecutable, appSettings, appVersion, previewAppSettings, revealPath, saveAppSettings } from "../../../lib/app-client";
+import { cn } from "../../../lib/cn";
 import { messageOf, pickedFolderPath } from "../../../lib/message";
-import { publishDensity, readDensity } from "../../../lib/density";
+import { normalizeDensity, publishDensity, readDensity } from "../../../lib/density";
 import { publishToolbarLabels, readToolbarLabels } from "../../../lib/toolbar-labels";
 import { publishZoom, readZoom } from "../../../lib/zoom";
 import { Button } from "../../Button";
 import { Dialog } from "../Dialog";
-import { AppSettingsTab } from "./AppSettingsTab";
-import { ChangePin } from "./ChangePin";
+import { AppearanceSettingsTab } from "./AppearanceSettingsTab";
+import { VaultSettingsTab } from "./VaultSettingsTab";
 
 type SettingsDialogProps = {
   open: boolean;
@@ -28,19 +29,28 @@ type SettingsDialogProps = {
   checkingUpdates: boolean;
 };
 
+type SettingsTab = "vault" | "appearance";
+
 type SettingsSnapshot = {
   folder: string;
   zoom: number;
+  density: number;
   theme: ThemeId;
   colorMode: ColorMode;
   toolbarLabels: boolean;
   runAtStartup: boolean;
 };
 
+const TABS: { id: SettingsTab; label: string }[] = [
+  { id: "vault", label: "Vault Settings" },
+  { id: "appearance", label: "Appearance" },
+];
+
 function sameSettings(left: SettingsSnapshot, right: SettingsSnapshot) {
   return (
     left.folder === right.folder &&
     left.zoom === right.zoom &&
+    left.density === right.density &&
     left.theme === right.theme &&
     left.colorMode === right.colorMode &&
     left.toolbarLabels === right.toolbarLabels &&
@@ -51,10 +61,12 @@ function sameSettings(left: SettingsSnapshot, right: SettingsSnapshot) {
 export function SettingsDialog({ open, onClose, onSaved, onCheckForUpdates, checkingUpdates }: SettingsDialogProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<SettingsTab>("vault");
   const [exePath, setExePath] = useState("");
   const [version, setVersion] = useState("");
   const [folder, setFolder] = useState("");
   const [zoom, setZoom] = useState(readZoom);
+  const [density, setDensity] = useState(readDensity);
   const [theme, setTheme] = useState<ThemeId>(readAppearance().theme);
   const [colorMode, setColorMode] = useState<ColorMode>(readAppearance().colorMode);
   const [toolbarLabels, setToolbarLabels] = useState(readToolbarLabels);
@@ -78,6 +90,7 @@ export function SettingsDialog({ open, onClose, onSaved, onCheckForUpdates, chec
     setLoading(true);
     setLoaded(null);
     setError(null);
+    setTab("vault");
     const appearance = readAppearance();
     opened.current = {
       theme: appearance.theme,
@@ -100,6 +113,7 @@ export function SettingsDialog({ open, onClose, onSaved, onCheckForUpdates, chec
           ? {
               folder: settings.settingsFolder,
               zoom: settings.fontZoom,
+              density: normalizeDensity(settings.density),
               theme: normalizeTheme(settings.theme),
               colorMode: normalizeColorMode(settings.colorMode),
               toolbarLabels: settings.toolbarLabels,
@@ -108,6 +122,7 @@ export function SettingsDialog({ open, onClose, onSaved, onCheckForUpdates, chec
           : {
               folder: settings.settingsFolder,
               zoom: readZoom(),
+              density: readDensity(),
               theme: appearance.theme,
               colorMode: appearance.colorMode,
               toolbarLabels: readToolbarLabels(),
@@ -121,12 +136,13 @@ export function SettingsDialog({ open, onClose, onSaved, onCheckForUpdates, chec
         setTheme(snapshot.theme);
         setColorMode(snapshot.colorMode);
         setZoom(snapshot.zoom);
+        setDensity(snapshot.density);
         setToolbarLabels(snapshot.toolbarLabels);
         setLoaded(snapshot);
         if (settings.shared) {
           publishAppearance(snapshot.theme, snapshot.colorMode);
           publishZoom(snapshot.zoom);
-          publishDensity(settings.density);
+          publishDensity(snapshot.density);
           publishToolbarLabels(snapshot.toolbarLabels);
         }
       } catch (caught) {
@@ -192,6 +208,7 @@ export function SettingsDialog({ open, onClose, onSaved, onCheckForUpdates, chec
       const saved = await saveAppSettings({
         settingsFolder: folder.trim(),
         fontZoom: zoom,
+        density: String(density),
         theme,
         colorMode,
         toolbarLabels,
@@ -213,15 +230,44 @@ export function SettingsDialog({ open, onClose, onSaved, onCheckForUpdates, chec
   const busy = loading || saving;
   const dirty =
     loaded !== null &&
-    !sameSettings(loaded, { folder, zoom, theme, colorMode, toolbarLabels, runAtStartup });
+    !sameSettings(loaded, { folder, zoom, density, theme, colorMode, toolbarLabels, runAtStartup });
+
+  const tabs = (
+    <div id="settings-tabs" role="tablist" aria-label="Settings sections" className="flex gap-1">
+      {TABS.map((entry) => {
+        const selected = tab === entry.id;
+        return (
+          <button
+            id={`settings-tab-${entry.id}`}
+            key={entry.id}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            aria-controls={`settings-panel-${entry.id}`}
+            disabled={busy}
+            onClick={() => setTab(entry.id)}
+            className={cn(
+              "-mb-px border-b-2 px-3 py-3 text-sm disabled:opacity-50",
+              selected
+                ? "border-sky-500 text-zinc-100"
+                : "border-transparent text-zinc-400 hover:text-zinc-200",
+            )}
+          >
+            <span id={`settings-tab-${entry.id}-label`}>{entry.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 
   return (
     <Dialog
       id="settings-dialog"
-      title="Settings"
+      ariaLabel="Settings"
       open={open}
       onClose={requestClose}
       panelClassName="max-w-3xl"
+      header={tabs}
       headerActions={
         dirty ? (
           <>
@@ -241,48 +287,61 @@ export function SettingsDialog({ open, onClose, onSaved, onCheckForUpdates, chec
         </p>
       ) : (
         <>
-        <AppSettingsTab
-          busy={busy}
-          exePath={exePath}
-          folder={folder}
-          zoom={zoom}
-          theme={theme}
-          colorMode={colorMode}
-          toolbarLabels={toolbarLabels}
-          runAtStartup={runAtStartup}
-          warning={warning}
-          error={error}
-          onFolderChange={setFolder}
-          onFolderCommit={() => void commitFolder(folder)}
-          onZoomChange={(next) => setZoom(publishZoom(next))}
-          onThemeChange={(next) => {
-            setTheme(next);
-            publishAppearance(next, colorMode);
-          }}
-          onColorModeChange={(next) => {
-            setColorMode(next);
-            publishAppearance(theme, next);
-          }}
-          onToolbarLabelsChange={(next) => setToolbarLabels(publishToolbarLabels(next))}
-          onRunAtStartupChange={setRunAtStartup}
-          onBrowse={() => void browse()}
-          onClearFolder={() => {
-            setFolder("");
-            setWarning(null);
-          }}
-          onRevealExe={() => void revealPath(exePath).catch((caught) => setError(messageOf(caught)))}
-          onCheckForUpdates={onCheckForUpdates}
-          checkingUpdates={checkingUpdates}
-          onSubmit={() => void save()}
-        />
-        <div id="settings-change-pin" className="mt-3">
-          <ChangePin busy={busy} />
-        </div>
-        {version ? (
-          <p id="settings-version" className="mt-3 text-xs text-zinc-500">
-            Version {version}
-          </p>
-        ) : null}
+          {tab === "vault" ? (
+            <VaultSettingsTab
+              busy={busy}
+              exePath={exePath}
+              folder={folder}
+              runAtStartup={runAtStartup}
+              warning={warning}
+              onFolderChange={setFolder}
+              onFolderCommit={() => void commitFolder(folder)}
+              onRunAtStartupChange={setRunAtStartup}
+              onBrowse={() => void browse()}
+              onClearFolder={() => {
+                setFolder("");
+                setWarning(null);
+              }}
+              onRevealExe={() => void revealPath(exePath).catch((caught) => setError(messageOf(caught)))}
+              onCheckForUpdates={onCheckForUpdates}
+              checkingUpdates={checkingUpdates}
+              onSubmit={() => void save()}
+            />
+          ) : (
+            <AppearanceSettingsTab
+              busy={busy}
+              folder={folder}
+              zoom={zoom}
+              density={density}
+              theme={theme}
+              colorMode={colorMode}
+              toolbarLabels={toolbarLabels}
+              onZoomChange={(next) => setZoom(publishZoom(next))}
+              onDensityChange={(next) => setDensity(publishDensity(next))}
+              onThemeChange={(next) => {
+                setTheme(next);
+                publishAppearance(next, colorMode);
+              }}
+              onColorModeChange={(next) => {
+                setColorMode(next);
+                publishAppearance(theme, next);
+              }}
+              onToolbarLabelsChange={(next) => setToolbarLabels(publishToolbarLabels(next))}
+              onSubmit={() => void save()}
+            />
+          )}
+
+          {error ? (
+            <p id="settings-error" className="mt-3 text-sm text-red-400">
+              {error}
+            </p>
+          ) : null}
+
+          {version ? (
+            <p id="settings-version" className="mt-3 text-xs text-zinc-500">
+              Version {version}
+            </p>
+          ) : null}
         </>
       )}
     </Dialog>

@@ -442,6 +442,7 @@ body,
 }
 
 body {
+  overflow: hidden;
   font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   background: var(--app-zinc-950);
   color: var(--app-zinc-100);
@@ -452,7 +453,10 @@ html[data-window="pantherbar"] body,
 html[data-window="pantherbar"] #root,
 html[data-window="launcher"],
 html[data-window="launcher"] body,
-html[data-window="launcher"] #root {
+html[data-window="launcher"] #root,
+html[data-window="screen-ruler"],
+html[data-window="screen-ruler"] body,
+html[data-window="screen-ruler"] #root {
   background: transparent;
 }
 

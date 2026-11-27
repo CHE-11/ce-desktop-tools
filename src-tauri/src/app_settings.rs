@@ -14,11 +14,13 @@ const SETTINGS_FILE_NAME: &str = "ce-desktop-tools.json";
 const DEFAULT_ZOOM: u32 = 100;
 const MIN_ZOOM: u32 = 60;
 const MAX_ZOOM: u32 = 160;
-const ZOOM_STEP: u32 = 10;
+const ZOOM_STEP: u32 = 5;
 const DEFAULT_THEME: &str = "zinc";
 const DEFAULT_COLOR_MODE: &str = "dark";
-const DEFAULT_DENSITY: &str = "default";
-const DENSITIES: &[&str] = &["cozy", "default", "compact"];
+const DEFAULT_DENSITY: &str = "100";
+const MIN_DENSITY: u32 = 50;
+const MAX_DENSITY: u32 = 150;
+const DENSITY_STEP: u32 = 5;
 const THEMES: &[&str] = &[
     "zinc",
     "nord",
@@ -142,6 +144,12 @@ struct PortableFile {
     launcher: crate::launcher::LauncherFile,
     #[serde(default)]
     terminal: TerminalSettings,
+    #[serde(default)]
+    always_on_top: crate::always_on_top::AlwaysOnTopFile,
+    #[serde(default)]
+    screen_ruler: crate::screen_ruler::ScreenRulerFile,
+    #[serde(default)]
+    color_picker: crate::color_picker::ColorPickerFile,
 }
 
 const TERMINAL_SHELLS: &[&str] = &["cmd", "powershell", "pwsh"];
@@ -190,6 +198,9 @@ impl Default for PortableFile {
             pantherbar: crate::pantherbar::PantherbarFile::default(),
             launcher: crate::launcher::LauncherFile::default(),
             terminal: TerminalSettings::default(),
+            always_on_top: crate::always_on_top::AlwaysOnTopFile::default(),
+            screen_ruler: crate::screen_ruler::ScreenRulerFile::default(),
+            color_picker: crate::color_picker::ColorPickerFile::default(),
         }
     }
 }
@@ -232,6 +243,7 @@ pub fn save_app_settings(
     app: &AppHandle,
     settings_folder: String,
     font_zoom: u32,
+    density: String,
     theme: String,
     color_mode: String,
     toolbar_labels: bool,
@@ -253,6 +265,7 @@ pub fn save_app_settings(
         }
 
         let zoom = clamp_zoom(font_zoom);
+        let density = normalize_density(&density);
         let theme = normalize_theme(&theme);
         let color_mode = normalize_color_mode(&color_mode);
         let destination_exists = !next_folder.is_empty() && settings_path(&next_folder).is_file();
@@ -262,6 +275,7 @@ pub fn save_app_settings(
             FolderPlan::Local => {
                 let mut file = loaded.file;
                 file.font_zoom = zoom;
+                file.density = density;
                 file.theme = theme;
                 file.color_mode = color_mode;
                 file.toolbar_labels = toolbar_labels;
@@ -288,6 +302,7 @@ pub fn save_app_settings(
             FolderPlan::Write => {
                 let mut file = loaded.file;
                 file.font_zoom = zoom;
+                file.density = density;
                 file.theme = theme;
                 file.color_mode = color_mode;
                 file.toolbar_labels = toolbar_labels;
@@ -458,6 +473,18 @@ fn read_local(app: &AppHandle) -> Result<PortableFile, String> {
             .get("terminal")
             .and_then(|value| serde_json::from_value(value).ok())
             .unwrap_or_default(),
+        always_on_top: settings
+            .get("alwaysOnTop")
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default(),
+        screen_ruler: settings
+            .get("screenRuler")
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default(),
+        color_picker: settings
+            .get("colorPicker")
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default(),
     };
     file.normalize_in_place();
     Ok(file)
@@ -479,6 +506,9 @@ fn write_local(app: &AppHandle, file: &PortableFile) -> Result<(), String> {
     store.set("pantherbar", json!(file.pantherbar));
     store.set("launcher", json!(file.launcher));
     store.set("terminal", json!(file.terminal));
+    store.set("alwaysOnTop", json!(file.always_on_top));
+    store.set("screenRuler", json!(file.screen_ruler));
+    store.set("colorPicker", json!(file.color_picker));
     store.set(POINTER_KEY, "");
     store.save().map_err(|error| error.to_string())
 }
@@ -632,7 +662,80 @@ impl PortableFile {
         self.pantherbar.normalize();
         self.launcher.normalize();
         self.terminal.normalize();
+        self.always_on_top.normalize();
+        self.screen_ruler.normalize();
+        self.color_picker.normalize();
     }
+}
+
+pub fn load_always_on_top(
+    app: &AppHandle,
+) -> Result<crate::always_on_top::AlwaysOnTopFile, String> {
+    with_settings_lock(|| {
+        let mut file = load_locked(app)?.file.always_on_top;
+        file.normalize();
+        Ok(file)
+    })
+}
+
+pub fn save_always_on_top(
+    app: &AppHandle,
+    mut next: crate::always_on_top::AlwaysOnTopFile,
+) -> Result<crate::always_on_top::AlwaysOnTopFile, String> {
+    next.normalize();
+    let saved = next.clone();
+    save_section(app, move |file| file.always_on_top = next)?;
+    Ok(saved)
+}
+
+pub fn load_screen_ruler(
+    app: &AppHandle,
+) -> Result<crate::screen_ruler::ScreenRulerFile, String> {
+    with_settings_lock(|| {
+        let mut file = load_locked(app)?.file.screen_ruler;
+        file.normalize();
+        Ok(file)
+    })
+}
+
+pub fn save_screen_ruler(
+    app: &AppHandle,
+    mut next: crate::screen_ruler::ScreenRulerFile,
+) -> Result<crate::screen_ruler::ScreenRulerFile, String> {
+    next.normalize();
+    let saved = next.clone();
+    save_section(app, move |file| file.screen_ruler = next)?;
+    Ok(saved)
+}
+
+pub fn load_color_picker(
+    app: &AppHandle,
+) -> Result<crate::color_picker::ColorPickerFile, String> {
+    with_settings_lock(|| {
+        let mut file = load_locked(app)?.file.color_picker;
+        file.normalize();
+        Ok(file)
+    })
+}
+
+pub fn save_color_picker(
+    app: &AppHandle,
+    mut next: crate::color_picker::ColorPickerFile,
+) -> Result<crate::color_picker::ColorPickerFile, String> {
+    next.normalize();
+    let saved = next.clone();
+    save_section(app, move |file| file.color_picker = next)?;
+    Ok(saved)
+}
+
+/// Machine-local values in `settings.json` that never go to the portable file.
+pub fn read_local_value(app: &AppHandle, key: &str) -> Option<JsonValue> {
+    let store = app.store(POINTER_STORE).ok()?;
+    store.get(key)
+}
+
+pub fn write_machine_value(app: &AppHandle, key: &str, value: JsonValue) -> Result<(), String> {
+    with_settings_lock(|| write_local_value(app, key, value))
 }
 
 pub fn load_terminal(app: &AppHandle) -> Result<TerminalSettings, String> {
@@ -757,12 +860,22 @@ fn normalize_theme(value: &str) -> String {
 }
 
 fn normalize_density(value: &str) -> String {
-    let value = value.trim();
-    if DENSITIES.contains(&value) {
-        value.to_string()
-    } else {
-        DEFAULT_DENSITY.to_string()
-    }
+    let value = value.trim().to_ascii_lowercase();
+    let percent = match value.as_str() {
+        "cozy" => 125,
+        "default" => 100,
+        "compact" => 75,
+        other => match other.parse::<u32>() {
+            Ok(parsed) if parsed > 0 => parsed,
+            _ => return DEFAULT_DENSITY.to_string(),
+        },
+    };
+    clamp_density(percent).to_string()
+}
+
+fn clamp_density(value: u32) -> u32 {
+    let stepped = value.saturating_add(DENSITY_STEP / 2) / DENSITY_STEP * DENSITY_STEP;
+    stepped.clamp(MIN_DENSITY, MAX_DENSITY)
 }
 
 fn normalize_color_mode(value: &str) -> String {
@@ -820,13 +933,13 @@ mod tests {
     };
 
     #[test]
-    fn zoom_stays_on_the_ten_percent_steps() {
+    fn zoom_stays_on_the_five_percent_steps() {
         assert_eq!(clamp_zoom(0), DEFAULT_ZOOM);
         assert_eq!(clamp_zoom(50), 60);
         assert_eq!(clamp_zoom(60), 60);
         assert_eq!(clamp_zoom(80), 80);
-        assert_eq!(clamp_zoom(84), 80);
-        assert_eq!(clamp_zoom(85), 90);
+        assert_eq!(clamp_zoom(82), 80);
+        assert_eq!(clamp_zoom(83), 85);
         assert_eq!(clamp_zoom(100), 100);
         assert_eq!(clamp_zoom(160), 160);
         assert_eq!(clamp_zoom(1000), 160);
@@ -912,7 +1025,7 @@ mod tests {
 
         let loaded: PortableFile = super::read_portable_file(&path).unwrap().normalize();
         assert_eq!(loaded.font_zoom, 130);
-        assert_eq!(loaded.density, "default");
+        assert_eq!(loaded.density, "100");
         assert_eq!(loaded.theme, "zinc");
         assert_eq!(loaded.color_mode, "dark");
         assert!(!loaded.toolbar_labels);
@@ -923,8 +1036,25 @@ mod tests {
         assert!(loaded.pantherbar.excluded_apps.is_empty());
         assert!(loaded.launcher.enabled);
         assert_eq!(loaded.launcher.hotkey, "Win+Space");
+        assert!(loaded.always_on_top.enabled);
+        assert_eq!(loaded.always_on_top.hotkey, "Ctrl+Space");
+        assert!(loaded.always_on_top.show_border);
+        assert_eq!(loaded.screen_ruler.hotkey, "Ctrl+Shift+Win+M");
+        assert_eq!(loaded.screen_ruler.default_measure_style, "none");
+        assert_eq!(loaded.color_picker.hotkey, "Shift+Win+C");
+        assert_eq!(loaded.color_picker.default_format, "HEX");
+        assert!(
+            loaded
+                .color_picker
+                .formats
+                .iter()
+                .any(|format| format.name == "CIELAB" && !format.visible)
+        );
 
         let mut next = loaded;
+        next.always_on_top.border_thickness = 4;
+        next.screen_ruler.pixel_tolerance = 12;
+        next.color_picker.show_color_name = true;
         next.theme = "nord".into();
         next.color_mode = "light".into();
         next.toolbar_labels = true;
@@ -933,7 +1063,7 @@ mod tests {
         write_portable_file(&path, &next).unwrap();
         let saved: PortableFile = super::read_portable_file(&path).unwrap().normalize();
         assert_eq!(saved.font_zoom, 130);
-        assert_eq!(saved.density, "default");
+        assert_eq!(saved.density, "100");
         assert_eq!(saved.theme, "nord");
         assert_eq!(saved.color_mode, "light");
         assert!(saved.toolbar_labels);
@@ -948,10 +1078,26 @@ mod tests {
         assert_eq!(saved.launcher.hotkey, "Win+Space");
         assert!(!raw.contains("alwaysOnTopHotkey"));
         assert!(!raw.contains("hibernateHotkey"));
+        assert!(raw.contains("\"alwaysOnTop\""));
+        assert!(raw.contains("\"screenRuler\""));
+        assert!(raw.contains("\"colorPicker\""));
+        assert_eq!(saved.always_on_top.border_thickness, 4);
+        assert_eq!(saved.screen_ruler.pixel_tolerance, 12);
+        assert!(saved.color_picker.show_color_name);
+        let again = saved.clone().normalize();
+        assert_eq!(again, saved);
 
         let mut kept = saved.clone();
         kept.density = "compact".into();
-        assert_eq!(kept.normalize().density, "compact");
+        assert_eq!(kept.normalize().density, "75");
+
+        let mut cozy = saved.clone();
+        cozy.density = "cozy".into();
+        assert_eq!(cozy.normalize().density, "125");
+
+        let mut percent = saved.clone();
+        percent.density = "110".into();
+        assert_eq!(percent.normalize().density, "110");
 
         let mut invalid = saved;
         invalid.theme = "nope".into();
@@ -960,7 +1106,7 @@ mod tests {
         let normalized = invalid.normalize();
         assert_eq!(normalized.theme, "zinc");
         assert_eq!(normalized.color_mode, "dark");
-        assert_eq!(normalized.density, "default");
+        assert_eq!(normalized.density, "100");
 
         let _ = std::fs::remove_dir_all(&directory);
     }

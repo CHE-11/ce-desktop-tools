@@ -3,7 +3,9 @@ import { createRoot } from "react-dom/client";
 import { applyAppearance, readAppearance } from "./lib/appearance";
 import { installDevConsole } from "./lib/dev-feedback";
 import { applyZoom, readZoom } from "./lib/zoom";
+import { ColorEditorWindow } from "./components/ColorPicker/ColorEditorWindow";
 import { LauncherWindow } from "./components/Launcher/LauncherWindow";
+import { RulerToolbar } from "./components/ScreenRuler/RulerToolbar";
 import { PantherbarBar } from "./components/Tools/PantherbarBar";
 import { HomePage } from "./Home.page";
 import "./index.css";
@@ -21,10 +23,16 @@ installNoInputSuggestions();
 
 const pantherbarWindow = window.__PANTHERBAR__ === true;
 const launcherWindow = window.__LAUNCHER__ === true;
+const screenRulerWindow = window.__SCREEN_RULER__ === true;
+const colorPickerWindow = window.__COLOR_PICKER__ === true;
 if (pantherbarWindow) {
   document.documentElement.dataset.window = "pantherbar";
 } else if (launcherWindow) {
   document.documentElement.dataset.window = "launcher";
+} else if (screenRulerWindow) {
+  document.documentElement.dataset.window = "screen-ruler";
+} else if (colorPickerWindow) {
+  document.documentElement.dataset.window = "color-picker";
 }
 
 const root = document.getElementById("root");
@@ -38,6 +46,12 @@ function WindowContent() {
   }
   if (launcherWindow) {
     return <LauncherWindow />;
+  }
+  if (screenRulerWindow) {
+    return <RulerToolbar />;
+  }
+  if (colorPickerWindow) {
+    return <ColorEditorWindow />;
   }
   return <HomePage />;
 }

@@ -5,7 +5,7 @@ export const ZOOM_EVENT = "ce-desktop-tools-zoom";
 export const DEFAULT_ZOOM = 100;
 export const MIN_ZOOM = 60;
 export const MAX_ZOOM = 160;
-export const ZOOM_STEP = 10;
+export const ZOOM_STEP = 5;
 
 const BASE_FONT_PX = 16;
 
@@ -35,9 +35,12 @@ export function readZoom() {
 export const FONT_SIZE_OPTIONS = [
   { id: "extra-small", label: "Extra Small", zoom: 80 },
   { id: "small", label: "Small", zoom: 90 },
+  { id: "medium-small", label: "Medium Small", zoom: 95 },
   { id: "regular", label: "Regular", zoom: 100 },
+  { id: "medium", label: "Medium", zoom: 110 },
   { id: "large", label: "Large", zoom: 120 },
   { id: "extra-large", label: "Extra Large", zoom: 140 },
+  { id: "huge", label: "Huge", zoom: 160 },
 ] as const;
 
 export function applyZoom(percent: number) {

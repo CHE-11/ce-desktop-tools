@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main", "pantherbar", "launcher"],
+  "windows": ["main", "pantherbar", "launcher", "screen-ruler", "color-picker"],
   "permissions": [
     "core:default",
     "core:window:allow-is-maximized",

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useState } from "react";
 import type { LauncherSave, LauncherState } from "../../../../types/launcher";
-import { chordOf } from "../../lib/hotkey";
 import { launcherRefreshApps, launcherSave, launcherState } from "../../lib/launcher-client";
 import { messageOf } from "../../lib/message";
 import { Button } from "../Button";
+import { HotkeyField } from "../HotkeyField";
 
 const EXAMPLES = [
   { id: "app", query: "chrome", detail: "Opens a Start menu app or Store app." },
@@ -25,8 +25,6 @@ export function Launcher() {
   const [state, setState] = useState<LauncherState>(EMPTY);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
-  const hotkeyRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,24 +56,6 @@ export function Launcher() {
     } catch (caught) {
       setError(messageOf(caught));
     }
-  }
-
-  function onHotkeyKey(event: ReactKeyboardEvent<HTMLButtonElement>) {
-    if (!recording) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.key === "Escape") {
-      setRecording(false);
-      return;
-    }
-    const chord = chordOf(event);
-    if (!chord) {
-      return;
-    }
-    setRecording(false);
-    void persist({ hotkey: chord });
   }
 
   async function refreshApps() {
@@ -117,22 +97,12 @@ export function Launcher() {
           <span id="launcher-hotkey-label" className="text-sm text-zinc-300">
             Hotkey
           </span>
-          <button
+          <HotkeyField
             id="launcher-hotkey-field"
-            ref={hotkeyRef}
-            type="button"
-            aria-pressed={recording}
+            value={state.hotkey}
             disabled={!ready}
-            onClick={() => {
-              setRecording(true);
-              hotkeyRef.current?.focus();
-            }}
-            onKeyDown={onHotkeyKey}
-            onBlur={() => setRecording(false)}
-            className="h-8 min-w-36 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-left text-sm text-zinc-100"
-          >
-            {recording ? "Press a shortcut" : state.hotkey}
-          </button>
+            onChange={(hotkey) => void persist({ hotkey })}
+          />
           <Button
             id="launcher-hotkey-default"
             variant="ghost"

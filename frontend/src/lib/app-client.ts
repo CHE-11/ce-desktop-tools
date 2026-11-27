@@ -18,6 +18,7 @@ export function appSettings() {
 export function saveAppSettings(input: {
   settingsFolder: string;
   fontZoom: number;
+  density: string;
   theme: string;
   colorMode: string;
   toolbarLabels: boolean;

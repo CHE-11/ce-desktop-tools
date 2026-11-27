@@ -4,8 +4,7 @@ export const TOOLS = [
   { id: "misspell", label: "Common misspells", lockable: false },
   { id: "date", label: "Date expander", lockable: false },
   { id: "ascii", label: "ASCII codes", lockable: false },
-  { id: "units", label: "Units", lockable: false },
-  { id: "calculator", label: "Calculator", lockable: false },
+  { id: "calculator", label: "Calculator & Units", lockable: false },
   { id: "app-shortcuts", label: "Keyboard Shortcuts", lockable: false },
   { id: "rename", label: "Batch rename", lockable: false },
   { id: "pantherbar", label: "Pantherbar", lockable: false },
@@ -17,6 +16,9 @@ export const TOOLS = [
   { id: "file-tools", label: "File Tools", lockable: false },
   { id: "file-associations", label: "File Associations", lockable: false },
   { id: "terminal", label: "Terminal", lockable: false },
+  { id: "always-on-top", label: "Always On Top", lockable: false },
+  { id: "screen-ruler", label: "Screen Ruler", lockable: false },
+  { id: "color-picker", label: "Color Picker", lockable: false },
 ] as const;
 
 export type ToolId = (typeof TOOLS)[number]["id"];

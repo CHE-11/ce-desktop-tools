@@ -3,7 +3,11 @@ import { cn } from "../../lib/cn";
 
 type DialogProps = {
   id: string;
-  title: string;
+  title?: string;
+  /** Replaces the title in the header. Use with `ariaLabel` when title is omitted. */
+  header?: ReactNode;
+  /** Accessible name when `header` is used without `title`. */
+  ariaLabel?: string;
   open: boolean;
   onClose: () => void;
   onEnter?: () => void;
@@ -21,8 +25,22 @@ function isTypingTarget(target: EventTarget | null) {
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
 }
 
-export function Dialog({ id, title, open, onClose, onEnter, children, panelClassName, bodyClassName, headerActions }: DialogProps) {
+export function Dialog({
+  id,
+  title,
+  header,
+  ariaLabel,
+  open,
+  onClose,
+  onEnter,
+  children,
+  panelClassName,
+  bodyClassName,
+  headerActions,
+}: DialogProps) {
   const ignoreBackdropUntil = useRef(0);
+  const labelledBy = title ? `${id}-title` : undefined;
+  const label = title ? undefined : (ariaLabel ?? "Dialog");
 
   useEffect(() => {
     if (!open) {
@@ -76,19 +94,26 @@ export function Dialog({ id, title, open, onClose, onEnter, children, panelClass
         id={id}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={`${id}-title`}
+        aria-labelledby={labelledBy}
+        aria-label={label}
         className={cn(
           "flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl",
           panelClassName,
         )}
         onClick={(event) => event.stopPropagation()}
       >
-        <div id={`${id}-header`} className="flex items-center gap-3 border-b border-zinc-800 px-4 py-3">
-          <h2 id={`${id}-title`} className="text-base font-semibold text-zinc-100">
-            {title}
-          </h2>
+        <div id={`${id}-header`} className="flex items-center gap-3 border-b border-zinc-800 px-4">
+          {header ? (
+            <div id={`${id}-header-content`} className="min-w-0 flex-1">
+              {header}
+            </div>
+          ) : (
+            <h2 id={`${id}-title`} className="py-3 text-base font-semibold text-zinc-100">
+              {title}
+            </h2>
+          )}
           {headerActions ? (
-            <div id={`${id}-header-actions`} className="ml-auto flex shrink-0 items-center gap-2">
+            <div id={`${id}-header-actions`} className="ml-auto flex shrink-0 items-center gap-2 py-2">
               {headerActions}
             </div>
           ) : null}
