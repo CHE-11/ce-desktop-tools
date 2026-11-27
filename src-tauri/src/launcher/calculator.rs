@@ -10,7 +10,9 @@ use super::calc::{
     apply_function, factorial, format_named_base, format_number, is_named_base, named_constant,
     named_function,
 };
-use super::units::{known_unit, show_in_unit, take_number, take_quantity};
+use super::units::{
+    known_unit, show_in_unit, take_number, take_quantity, take_unit_quantity, take_unit_symbol,
+};
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -290,7 +292,51 @@ impl<'a> Parser<'a> {
         while self.consume_char('!') {
             value = bang(value)?;
         }
-        Ok(value)
+        // `#3in`, `ans mm`, and `(2+3)in` attach a unit after the value.
+        self.apply_unit(value)
+    }
+
+    fn apply_unit(&mut self, value: Value) -> Result<Value, String> {
+        self.skip();
+        match value {
+            Value::Number(amount) => {
+                let Some((quantity, len)) = take_unit_quantity(amount, self.rest()) else {
+                    return Ok(Value::Number(amount));
+                };
+                self.index += len;
+                Ok(Value::Quantity {
+                    temperature: quantity.dimension == "temperature",
+                    base: quantity.base,
+                    dimension: quantity.dimension.to_string(),
+                    symbol: quantity.symbol.to_string(),
+                })
+            }
+            Value::Quantity {
+                base,
+                dimension,
+                symbol,
+                temperature,
+            } => {
+                let Some((next_symbol, next_dimension, len)) = take_unit_symbol(self.rest()) else {
+                    return Ok(Value::Quantity {
+                        base,
+                        dimension,
+                        symbol,
+                        temperature,
+                    });
+                };
+                if next_dimension != dimension {
+                    return Err(format!("Can't convert {symbol} to {next_symbol}."));
+                }
+                self.index += len;
+                Ok(Value::Quantity {
+                    base,
+                    dimension,
+                    symbol: next_symbol.to_string(),
+                    temperature,
+                })
+            }
+        }
     }
 
     fn primary(&mut self) -> Result<Value, String> {
@@ -745,5 +791,39 @@ mod tests {
 
         assert_eq!(evaluate("#3", &previous).message, "No result #3.");
         assert_eq!(line("ans").message, "No previous result.");
+    }
+
+    #[test]
+    fn reference_can_take_a_unit() {
+        let previous = [CalcRef {
+            id: 3,
+            base: 3.0,
+            dimension: None,
+            unit: None,
+        }];
+        let stuck = evaluate("#3in + 1in", &previous);
+        assert!(stuck.ok, "{}", stuck.message);
+        assert_eq!(stuck.value, "4");
+        assert_eq!(stuck.unit.as_deref(), Some("in"));
+
+        let spaced = evaluate("#3 in + 5 mm", &previous);
+        assert!(spaced.ok, "{}", spaced.message);
+        assert_eq!(spaced.unit.as_deref(), Some("in"));
+
+        let grouped = line("(2+1)in");
+        assert!(grouped.ok, "{}", grouped.message);
+        assert_eq!(grouped.value, "3");
+        assert_eq!(grouped.unit.as_deref(), Some("in"));
+
+        let length = [CalcRef {
+            id: 3,
+            base: 0.0254,
+            dimension: Some("length".into()),
+            unit: Some("mm".into()),
+        }];
+        let retarget = evaluate("#3in", &length);
+        assert!(retarget.ok, "{}", retarget.message);
+        assert_eq!(retarget.value, "1");
+        assert_eq!(retarget.unit.as_deref(), Some("in"));
     }
 }

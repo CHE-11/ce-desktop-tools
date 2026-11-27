@@ -198,7 +198,7 @@ export function CalculatorUnits() {
             <span id="calc-units-title-label">Calculator &amp; Units</span>
           </h1>
           <p id="calc-units-intro" className="mt-1 text-xs leading-5 text-zinc-400">
-            Type a calculation or a conversion. 5 km to mi, 72 f to c, 5mm + 10in, or #1 * 2. Enter adds it to the tape.
+            Type a calculation or a conversion. 5 km to mi, 5mm + 10in, #3in + 5 mm, or #1 * 2. Enter adds it to the tape.
           </p>
         </div>
         <Button id="calc-units-clear" variant="outline" disabled={tape.lines.length === 0} onClick={() => tape.clear()}>
@@ -220,7 +220,7 @@ export function CalculatorUnits() {
           ref={inputRef}
           value={query}
           disabled={!tape.ready}
-          placeholder="5 km to mi, 1/2 cup to ml, 5mm + 10in, #1 + 2in"
+          placeholder="5 km to mi, 1/2 cup to ml, 5mm + 10in, #3in + 5 mm"
           spellCheck={false}
           autoCapitalize="off"
           onChange={(event) => {

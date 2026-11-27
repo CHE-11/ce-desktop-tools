@@ -914,6 +914,32 @@ pub(crate) fn known_unit(name: &str) -> bool {
     find_unit(name).is_some()
 }
 
+/// A unit at the start of `text`, for attaching to `#3in` or `(2+3) mm`.
+pub(crate) fn take_unit_quantity(amount: f64, text: &str) -> Option<(TakenQuantity, usize)> {
+    let (unit, len) = take_unit(text)?;
+    if len == 0 {
+        return None;
+    }
+    let base = to_base(amount, unit.scale);
+    if !base.is_finite() {
+        return None;
+    }
+    Some((
+        TakenQuantity {
+            base,
+            dimension: dimension_id(unit.dimension),
+            symbol: unit.symbol,
+        },
+        len,
+    ))
+}
+
+/// Symbol and dimension of a leading unit name, without converting an amount.
+pub(crate) fn take_unit_symbol(text: &str) -> Option<(&'static str, &'static str, usize)> {
+    let (unit, len) = take_unit(text)?;
+    (len > 0).then_some((unit.symbol, dimension_id(unit.dimension), len))
+}
+
 pub(crate) fn show_in_unit(
     base: f64,
     from_symbol: &str,
