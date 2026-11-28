@@ -1,12 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ClipboardState } from "../../../types/clipboard";
+import type { ClipCleaner, ClipCleanerPreview, ClipboardState } from "../../../types/clipboard";
 
 export function clipboardState() {
   return invoke<ClipboardState>("clipboard_state");
-}
-
-export function clipboardSetPinned(id: string, pinned: boolean) {
-  return invoke<ClipboardState>("clipboard_set_pinned", { id, pinned });
 }
 
 export function clipboardDelete(id: string) {
@@ -23,4 +19,16 @@ export function clipboardClear() {
 
 export function clipboardClearWindows() {
   return invoke<void>("clipboard_clear_windows");
+}
+
+export function clipboardCleanerState() {
+  return invoke<ClipCleaner>("clipboard_cleaner_state");
+}
+
+export function clipboardCleanerSave(cleaner: ClipCleaner) {
+  return invoke<ClipCleaner>("clipboard_cleaner_save", { cleaner });
+}
+
+export function clipboardCleanerPreview(text: string, cleaner: ClipCleaner) {
+  return invoke<ClipCleanerPreview>("clipboard_cleaner_preview", { text, cleaner });
 }

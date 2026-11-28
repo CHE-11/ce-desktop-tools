@@ -87,6 +87,9 @@ fn save_app_settings(
     if let Some(picker) = app.try_state::<color_picker::ColorPicker>() {
         picker.reload();
     }
+    if let Some(clipboard) = app.try_state::<clipboard::Clipboard>() {
+        clipboard.reload_cleaner();
+    }
     Ok(saved)
 }
 
@@ -372,15 +375,6 @@ fn clipboard_state(clipboard: tauri::State<'_, clipboard::Clipboard>) -> clipboa
 }
 
 #[tauri::command]
-fn clipboard_set_pinned(
-    clipboard: tauri::State<'_, clipboard::Clipboard>,
-    id: String,
-    pinned: bool,
-) -> Result<clipboard::ClipboardState, String> {
-    clipboard.set_pinned(id, pinned)
-}
-
-#[tauri::command]
 fn clipboard_delete(
     clipboard: tauri::State<'_, clipboard::Clipboard>,
     id: String,
@@ -406,6 +400,29 @@ fn clipboard_clear(
 #[tauri::command]
 fn clipboard_clear_windows() -> Result<(), String> {
     clipboard::clear_clipboard()
+}
+
+#[tauri::command]
+fn clipboard_cleaner_state(
+    clipboard: tauri::State<'_, clipboard::Clipboard>,
+) -> clipboard::ClipCleanerFile {
+    clipboard.cleaner()
+}
+
+#[tauri::command]
+fn clipboard_cleaner_save(
+    clipboard: tauri::State<'_, clipboard::Clipboard>,
+    cleaner: clipboard::ClipCleanerFile,
+) -> Result<clipboard::ClipCleanerFile, String> {
+    clipboard.save_cleaner(cleaner)
+}
+
+#[tauri::command]
+fn clipboard_cleaner_preview(
+    cleaner: clipboard::ClipCleanerFile,
+    text: String,
+) -> clipboard::CleanerPreview {
+    clipboard::preview_cleaner(cleaner, text)
 }
 
 #[tauri::command]
@@ -729,7 +746,9 @@ fn terminal_kill(terminals: tauri::State<'_, terminal::Terminals>, id: String) {
 }
 
 #[tauri::command]
-fn terminal_list(terminals: tauri::State<'_, terminal::Terminals>) -> Vec<terminal::TerminalSession> {
+fn terminal_list(
+    terminals: tauri::State<'_, terminal::Terminals>,
+) -> Vec<terminal::TerminalSession> {
     terminals.list()
 }
 
@@ -810,6 +829,8 @@ async fn app_calls() -> Result<app_calls::AppCallsSnapshot, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // The Start menu shortcut has to exist before the process app id, or Windows drops toasts.
+    clipboard::register_notifications();
     taskbar::set_process_app_id();
     // Close hides the window and leaves this process in the tray. This has to
     // be first so a later launch from the taskbar exits before it can add
@@ -968,11 +989,13 @@ pub fn run() {
             unlock_vault,
             lock_vault,
             clipboard_state,
-            clipboard_set_pinned,
             clipboard_delete,
             clipboard_copy,
             clipboard_clear,
             clipboard_clear_windows,
+            clipboard_cleaner_state,
+            clipboard_cleaner_save,
+            clipboard_cleaner_preview,
             app_shortcuts_state,
             app_shortcuts_save,
             misspell_state,

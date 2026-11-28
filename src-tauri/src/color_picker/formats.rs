@@ -156,20 +156,76 @@ pub struct BuiltIn {
 }
 
 pub const BUILT_INS: &[BuiltIn] = &[
-    BuiltIn { name: "HEX", template: "%Rex%Grx%Blx", visible: true },
-    BuiltIn { name: "RGB", template: "rgb(%Re, %Gr, %Bl)", visible: true },
-    BuiltIn { name: "HSL", template: "hsl(%Hu, %Sl%, %Ll%)", visible: true },
-    BuiltIn { name: "HSV", template: "hsv(%Hu, %Sb%, %Va%)", visible: false },
-    BuiltIn { name: "CMYK", template: "cmyk(%Cy%, %Ma%, %Ye%, %Bk%)", visible: false },
-    BuiltIn { name: "HSB", template: "hsb(%Hu, %Sb%, %Br%)", visible: false },
-    BuiltIn { name: "HSI", template: "hsi(%Hu, %Si%, %In%)", visible: false },
-    BuiltIn { name: "HWB", template: "hwb(%Hu, %Wh%, %Bn%)", visible: false },
-    BuiltIn { name: "NCol", template: "%Hn, %Wh%, %Bn%", visible: false },
-    BuiltIn { name: "CIELAB", template: "CIELab(%Lc, %Ca, %Cb)", visible: false },
-    BuiltIn { name: "CIEXYZ", template: "XYZ(%Xv, %Yv, %Zv)", visible: false },
-    BuiltIn { name: "VEC4", template: "(%Reff, %Grff, %Blff, 1f)", visible: false },
-    BuiltIn { name: "Decimal", template: "%Dv", visible: false },
-    BuiltIn { name: "HEX Int", template: "0xFF%ReX%GrX%BlX", visible: false },
+    BuiltIn {
+        name: "HEX",
+        template: "%Rex%Grx%Blx",
+        visible: true,
+    },
+    BuiltIn {
+        name: "RGB",
+        template: "rgb(%Re, %Gr, %Bl)",
+        visible: true,
+    },
+    BuiltIn {
+        name: "HSL",
+        template: "hsl(%Hu, %Sl%, %Ll%)",
+        visible: true,
+    },
+    BuiltIn {
+        name: "HSV",
+        template: "hsv(%Hu, %Sb%, %Va%)",
+        visible: false,
+    },
+    BuiltIn {
+        name: "CMYK",
+        template: "cmyk(%Cy%, %Ma%, %Ye%, %Bk%)",
+        visible: false,
+    },
+    BuiltIn {
+        name: "HSB",
+        template: "hsb(%Hu, %Sb%, %Br%)",
+        visible: false,
+    },
+    BuiltIn {
+        name: "HSI",
+        template: "hsi(%Hu, %Si%, %In%)",
+        visible: false,
+    },
+    BuiltIn {
+        name: "HWB",
+        template: "hwb(%Hu, %Wh%, %Bn%)",
+        visible: false,
+    },
+    BuiltIn {
+        name: "NCol",
+        template: "%Hn, %Wh%, %Bn%",
+        visible: false,
+    },
+    BuiltIn {
+        name: "CIELAB",
+        template: "CIELab(%Lc, %Ca, %Cb)",
+        visible: false,
+    },
+    BuiltIn {
+        name: "CIEXYZ",
+        template: "XYZ(%Xv, %Yv, %Zv)",
+        visible: false,
+    },
+    BuiltIn {
+        name: "VEC4",
+        template: "(%Reff, %Grff, %Blff, 1f)",
+        visible: false,
+    },
+    BuiltIn {
+        name: "Decimal",
+        template: "%Dv",
+        visible: false,
+    },
+    BuiltIn {
+        name: "HEX Int",
+        template: "0xFF%ReX%GrX%BlX",
+        visible: false,
+    },
 ];
 
 pub fn built_in(name: &str) -> Option<&'static BuiltIn> {
@@ -178,9 +234,9 @@ pub fn built_in(name: &str) -> Option<&'static BuiltIn> {
 
 /// Longer tokens come first so `%Reff` is not read as `%Re` + `ff`.
 const TOKENS: &[&str] = &[
-    "%Reff", "%Grff", "%Blff", "%Rex", "%ReX", "%Grx", "%GrX", "%Blx", "%BlX", "%Re", "%Gr",
-    "%Bl", "%Al", "%Cy", "%Ma", "%Ye", "%Bk", "%Hu", "%Sl", "%Ll", "%Sb", "%Va", "%Br", "%Si",
-    "%In", "%Wh", "%Bn", "%Hn", "%Lc", "%Ca", "%Cb", "%Xv", "%Yv", "%Zv", "%Dv", "%Na",
+    "%Reff", "%Grff", "%Blff", "%Rex", "%ReX", "%Grx", "%GrX", "%Blx", "%BlX", "%Re", "%Gr", "%Bl",
+    "%Al", "%Cy", "%Ma", "%Ye", "%Bk", "%Hu", "%Sl", "%Ll", "%Sb", "%Va", "%Br", "%Si", "%In",
+    "%Wh", "%Bn", "%Hn", "%Lc", "%Ca", "%Cb", "%Xv", "%Yv", "%Zv", "%Dv", "%Na",
 ];
 
 /// Every token with a short description, for the format editor.
@@ -271,8 +327,9 @@ fn token_value(token: &str, color: Rgb) -> String {
         "%Xv" => format!("{:.4}", color.xyz().0),
         "%Yv" => format!("{:.4}", color.xyz().1),
         "%Zv" => format!("{:.4}", color.xyz().2),
-        "%Dv" => (u32::from(color.r) + u32::from(color.g) * 256 + u32::from(color.b) * 65536)
-            .to_string(),
+        "%Dv" => {
+            (u32::from(color.r) + u32::from(color.g) * 256 + u32::from(color.b) * 65536).to_string()
+        }
         "%Na" => super::names::nearest(color).to_string(),
         _ => token.to_string(),
     }
@@ -350,7 +407,10 @@ mod tests {
     fn black_white_and_gray_have_no_hue() {
         let black = Rgb::from_hex("#000000").unwrap();
         assert_eq!(render("hsl(%Hu, %Sl%, %Ll%)", black), "hsl(0, 0%, 0%)");
-        assert_eq!(render("cmyk(%Cy%, %Ma%, %Ye%, %Bk%)", black), "cmyk(0%, 0%, 0%, 100%)");
+        assert_eq!(
+            render("cmyk(%Cy%, %Ma%, %Ye%, %Bk%)", black),
+            "cmyk(0%, 0%, 0%, 100%)"
+        );
         let white = Rgb::from_hex("#ffffff").unwrap();
         assert_eq!(render("%Hn, %Wh%, %Bn%", white), "R0, 100%, 0%");
     }

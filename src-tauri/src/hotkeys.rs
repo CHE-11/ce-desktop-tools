@@ -99,7 +99,10 @@ pub fn check_free(id: HotkeyId, hotkey: &str) -> Result<(), String> {
         }
         let slot = slots[other as usize];
         if slot.enabled && slot.chord.map(|chord| chord.label()) == Some(label.clone()) {
-            return Err(format!("{label} is already the {} shortcut.", other.title()));
+            return Err(format!(
+                "{label} is already the {} shortcut.",
+                other.title()
+            ));
         }
     }
     Ok(())
@@ -159,8 +162,7 @@ fn run() {
                 if message.lParam.0 != 0 {
                     tap_mask_key();
                 }
-                if let (Some(app), Some(id)) = (APP.get(), HotkeyId::from_index(message.wParam.0))
-                {
+                if let (Some(app), Some(id)) = (APP.get(), HotkeyId::from_index(message.wParam.0)) {
                     dispatch(app, id);
                 }
                 continue;

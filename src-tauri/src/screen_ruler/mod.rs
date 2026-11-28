@@ -357,12 +357,9 @@ mod overlay {
             let unit = self.settings.extra_units.as_str();
             match self.style.as_str() {
                 "bounds" => match self.rectangle() {
-                    Some((left, top, right, bottom)) => measure::describe(
-                        Some(right - left + 1),
-                        Some(bottom - top + 1),
-                        dpi,
-                        unit,
-                    ),
+                    Some((left, top, right, bottom)) => {
+                        measure::describe(Some(right - left + 1), Some(bottom - top + 1), dpi, unit)
+                    }
                     None => vec!["Drag to measure".into()],
                 },
                 "horizontal" => measure::describe(Some(self.span().width()), None, dpi, unit),
@@ -441,7 +438,17 @@ mod overlay {
 
         fn paint(&mut self, dc: HDC, width: i32, height: i32) {
             unsafe {
-                let _ = BitBlt(dc, 0, 0, width, height, Some(self.capture.dc), 0, 0, SRCCOPY);
+                let _ = BitBlt(
+                    dc,
+                    0,
+                    0,
+                    width,
+                    height,
+                    Some(self.capture.dc),
+                    0,
+                    0,
+                    SRCCOPY,
+                );
             }
             let scale = self.scale();
             let line = (scale.round() as i32).max(1);
@@ -458,23 +465,66 @@ mod overlay {
                     let span = self.span();
                     let half = line / 2;
                     if style != "vertical" {
-                        fill(dc, span.left, y - half, span.right + 1, y - half + line, color);
+                        fill(
+                            dc,
+                            span.left,
+                            y - half,
+                            span.right + 1,
+                            y - half + line,
+                            color,
+                        );
                         if self.settings.draw_feet_on_cross {
-                            fill(dc, span.left, y - feet, span.left + line, y + feet + 1, color);
-                            fill(dc, span.right + 1 - line, y - feet, span.right + 1, y + feet + 1, color);
+                            fill(
+                                dc,
+                                span.left,
+                                y - feet,
+                                span.left + line,
+                                y + feet + 1,
+                                color,
+                            );
+                            fill(
+                                dc,
+                                span.right + 1 - line,
+                                y - feet,
+                                span.right + 1,
+                                y + feet + 1,
+                                color,
+                            );
                         }
                     }
                     if style != "horizontal" {
-                        fill(dc, x - half, span.top, x - half + line, span.bottom + 1, color);
+                        fill(
+                            dc,
+                            x - half,
+                            span.top,
+                            x - half + line,
+                            span.bottom + 1,
+                            color,
+                        );
                         if self.settings.draw_feet_on_cross {
                             fill(dc, x - feet, span.top, x + feet + 1, span.top + line, color);
-                            fill(dc, x - feet, span.bottom + 1 - line, x + feet + 1, span.bottom + 1, color);
+                            fill(
+                                dc,
+                                x - feet,
+                                span.bottom + 1 - line,
+                                x + feet + 1,
+                                span.bottom + 1,
+                                color,
+                            );
                         }
                     }
                 }
             }
             let offset = (16.0 * scale).round() as i32;
-            label(dc, x + offset, y + offset, &self.lines(), scale, width, height);
+            label(
+                dc,
+                x + offset,
+                y + offset,
+                &self.lines(),
+                scale,
+                width,
+                height,
+            );
         }
 
         fn tick_ms(&self) -> Option<u32> {

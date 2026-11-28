@@ -104,6 +104,11 @@ const TOOLS: &[Entry] = &[
         keywords: "history",
     },
     Entry {
+        id: "clip-cleaner",
+        title: "Clip Cleaner",
+        keywords: "clipboard regex replace clean",
+    },
+    Entry {
         id: "misspell",
         title: "Common misspells",
         keywords: "spelling",

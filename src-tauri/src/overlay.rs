@@ -90,12 +90,7 @@ mod native {
         let raw = ACTIVE.load(Ordering::SeqCst);
         if raw != 0 {
             unsafe {
-                let _ = PostMessageW(
-                    Some(HWND(raw as *mut _)),
-                    WM_CLOSE,
-                    WPARAM(0),
-                    LPARAM(0),
-                );
+                let _ = PostMessageW(Some(HWND(raw as *mut _)), WM_CLOSE, WPARAM(0), LPARAM(0));
             }
         }
     }
@@ -174,12 +169,7 @@ mod native {
                 let _ = TranslateMessage(&message);
                 DispatchMessageW(&message);
             }
-            let _ = ACTIVE.compare_exchange(
-                hwnd.0 as isize,
-                0,
-                Ordering::SeqCst,
-                Ordering::SeqCst,
-            );
+            let _ = ACTIVE.compare_exchange(hwnd.0 as isize, 0, Ordering::SeqCst, Ordering::SeqCst);
             if let Some(mut running) = RUNNING.with(|slot| slot.borrow_mut().take()) {
                 running.overlay.closed();
             }
@@ -332,9 +322,8 @@ mod native {
             } else {
                 GetWindowThreadProcessId(foreground, None)
             };
-            let attached = other != 0
-                && other != current
-                && AttachThreadInput(current, other, true).as_bool();
+            let attached =
+                other != 0 && other != current && AttachThreadInput(current, other, true).as_bool();
             let _ = SetForegroundWindow(hwnd);
             let _ = BringWindowToTop(hwnd);
             if attached {
@@ -406,7 +395,12 @@ mod native {
             );
             let previous_font = SelectObject(dc, font.into());
             let mut measure = RECT::default();
-            DrawTextW(dc, &mut wide_mut, &mut measure, DT_CALCRECT | DT_LEFT | DT_NOPREFIX);
+            DrawTextW(
+                dc,
+                &mut wide_mut,
+                &mut measure,
+                DT_CALCRECT | DT_LEFT | DT_NOPREFIX,
+            );
             let box_width = measure.right - measure.left + padding * 2;
             let box_height = measure.bottom - measure.top + padding * 2;
             let mut left = x;
@@ -457,7 +451,15 @@ mod native {
     }
 
     /// An outline with no fill, for the magnifier.
-    pub fn outline(dc: HDC, left: i32, top: i32, right: i32, bottom: i32, rgb: [u8; 3], width: i32) {
+    pub fn outline(
+        dc: HDC,
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+        rgb: [u8; 3],
+        width: i32,
+    ) {
         unsafe {
             let pen = CreatePen(PS_SOLID, width, colorref(rgb));
             let previous_pen = SelectObject(dc, pen.into());

@@ -74,7 +74,10 @@ pub fn state(app: &AppHandle) -> FileAssociationsState {
     view_of(folder, file, error)
 }
 
-pub fn apply(app: &AppHandle, association: FileAssociation) -> Result<FileAssociationsState, String> {
+pub fn apply(
+    app: &AppHandle,
+    association: FileAssociation,
+) -> Result<FileAssociationsState, String> {
     let folder = require_folder(app)?;
     let mut file = load(&folder)?;
     let mut next = prepare(association)?;
@@ -83,9 +86,15 @@ pub fn apply(app: &AppHandle, association: FileAssociation) -> Result<FileAssoci
         .iter()
         .any(|other| other.id != next.id && other.extension == next.extension)
     {
-        return Err(format!("{} already has an association in this list.", next.extension));
+        return Err(format!(
+            "{} already has an association in this list.",
+            next.extension
+        ));
     }
-    let existing = file.associations.iter().position(|other| other.id == next.id);
+    let existing = file
+        .associations
+        .iter()
+        .position(|other| other.id == next.id);
     if let Some(index) = existing {
         let old = &file.associations[index];
         next.previous_prog_id = old.previous_prog_id.clone();
@@ -160,7 +169,11 @@ pub fn prog_id_for(extension: &str) -> String {
 }
 
 fn normalize_extension(value: &str) -> Result<String, String> {
-    let trimmed = value.trim().trim_start_matches('*').trim_start_matches('.').to_lowercase();
+    let trimmed = value
+        .trim()
+        .trim_start_matches('*')
+        .trim_start_matches('.')
+        .to_lowercase();
     if trimmed.is_empty() {
         return Err("Enter a file extension, such as .log.".into());
     }
@@ -175,7 +188,11 @@ fn normalize_extension(value: &str) -> Result<String, String> {
 
 fn prepare(mut association: FileAssociation) -> Result<FileAssociation, String> {
     association.extension = normalize_extension(&association.extension)?;
-    association.program_path = association.program_path.trim().trim_matches('"').to_string();
+    association.program_path = association
+        .program_path
+        .trim()
+        .trim_matches('"')
+        .to_string();
     if association.program_path.is_empty() {
         return Err("Choose a program to open these files.".into());
     }
@@ -237,8 +254,12 @@ fn load(folder: &str) -> Result<AssociationsFile, String> {
     }
     let bytes =
         fs::read(&path).map_err(|error| format!("Couldn't read {}: {error}", path.display()))?;
-    serde_json::from_slice(&bytes)
-        .map_err(|error| format!("{} is not a valid associations file: {error}", path.display()))
+    serde_json::from_slice(&bytes).map_err(|error| {
+        format!(
+            "{} is not a valid associations file: {error}",
+            path.display()
+        )
+    })
 }
 
 fn write_file(path: &Path, file: &AssociationsFile) -> Result<(), String> {
@@ -296,12 +317,17 @@ mod registry {
             .create_subkey(format!(r"{CLASSES}\{prog_id}"))
             .map_err(fail)?;
         let label = if association.label.is_empty() {
-            format!("{} file", association.extension.trim_start_matches('.').to_uppercase())
+            format!(
+                "{} file",
+                association.extension.trim_start_matches('.').to_uppercase()
+            )
         } else {
             association.label.clone()
         };
         prog_key.set_value("", &label).map_err(fail)?;
-        prog_key.set_value("FriendlyTypeName", &label).map_err(fail)?;
+        prog_key
+            .set_value("FriendlyTypeName", &label)
+            .map_err(fail)?;
         let icon = association
             .icon_path
             .clone()
@@ -312,7 +338,10 @@ mod registry {
             .create_subkey(r"shell\open\command")
             .map_err(fail)?;
         command_key
-            .set_value("", &command_line(&association.program_path, &association.arguments))
+            .set_value(
+                "",
+                &command_line(&association.program_path, &association.arguments),
+            )
             .map_err(fail)?;
 
         let ext_path = format!(r"{CLASSES}\{}", association.extension);
@@ -433,7 +462,10 @@ mod tests {
 
     #[test]
     fn command_line_adds_file_placeholder() {
-        assert_eq!(command_line("C:\\a b\\x.exe", ""), "\"C:\\a b\\x.exe\" \"%1\"");
+        assert_eq!(
+            command_line("C:\\a b\\x.exe", ""),
+            "\"C:\\a b\\x.exe\" \"%1\""
+        );
         assert_eq!(
             command_line("x.exe", "--reuse \"%1\""),
             "\"x.exe\" --reuse \"%1\""

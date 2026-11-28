@@ -659,9 +659,8 @@ fn register_raw_keyboard(hwnd: windows::Win32::Foundation::HWND) {
         dwFlags: RIDEV_INPUTSINK,
         hwndTarget: hwnd,
     }];
-    let registered = unsafe {
-        RegisterRawInputDevices(&devices, std::mem::size_of::<RAWINPUTDEVICE>() as u32)
-    };
+    let registered =
+        unsafe { RegisterRawInputDevices(&devices, std::mem::size_of::<RAWINPUTDEVICE>() as u32) };
     if registered.is_err() {
         eprintln!("ce-desktop-tools could not watch keyboard input for text expansion");
     }
@@ -1353,7 +1352,10 @@ mod tests {
         };
         let mut ticks = 0u32;
         for _ in 0..9 {
-            assert_eq!(hook_needs_reinstall(WM_TIMER, 1, true, false, &mut ticks), None);
+            assert_eq!(
+                hook_needs_reinstall(WM_TIMER, 1, true, false, &mut ticks),
+                None
+            );
         }
         assert_eq!(
             hook_needs_reinstall(WM_TIMER, 1, true, false, &mut ticks),
@@ -1397,7 +1399,10 @@ mod tests {
             hook_needs_reinstall(super::REHOOK_MESSAGE, 0, true, false, &mut ticks),
             Some(Rehook::Resume)
         );
-        assert_eq!(hook_needs_reinstall(WM_KEYDOWN, 0, false, true, &mut ticks), None);
+        assert_eq!(
+            hook_needs_reinstall(WM_KEYDOWN, 0, false, true, &mut ticks),
+            None
+        );
     }
 
     #[test]
@@ -1415,7 +1420,10 @@ mod tests {
             hook_needs_reinstall(WM_TIMER, 1, true, true, &mut ticks),
             Some(Rehook::DeadHook)
         );
-        assert_eq!(hook_needs_reinstall(WM_TIMER, 1, true, false, &mut ticks), None);
+        assert_eq!(
+            hook_needs_reinstall(WM_TIMER, 1, true, false, &mut ticks),
+            None
+        );
     }
 
     #[test]
@@ -1432,9 +1440,18 @@ mod tests {
     #[test]
     fn generic_modifier_codes_cover_both_sides() {
         use super::modifier_bits;
-        assert_eq!(modifier_bits(0x11), modifier_bits(0xA2) | modifier_bits(0xA3));
-        assert_eq!(modifier_bits(0x12), modifier_bits(0xA4) | modifier_bits(0xA5));
-        assert_eq!(modifier_bits(0x10), modifier_bits(0xA0) | modifier_bits(0xA1));
+        assert_eq!(
+            modifier_bits(0x11),
+            modifier_bits(0xA2) | modifier_bits(0xA3)
+        );
+        assert_eq!(
+            modifier_bits(0x12),
+            modifier_bits(0xA4) | modifier_bits(0xA5)
+        );
+        assert_eq!(
+            modifier_bits(0x10),
+            modifier_bits(0xA0) | modifier_bits(0xA1)
+        );
         assert_eq!(modifier_bits(u16::from(b'A')), 0);
     }
 

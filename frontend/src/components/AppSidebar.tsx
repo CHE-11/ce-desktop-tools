@@ -5,6 +5,7 @@ import {
   Calculator,
   Cat,
   Clipboard,
+  Eraser,
   FileCog,
   FilePen,
   Files,
@@ -35,6 +36,7 @@ import { StayAwake } from "./Tools/Actions/StayAwake.action";
 const TOOL_ICONS: Record<ToolId, LucideIcon> = {
   expansion: Type,
   clipboard: Clipboard,
+  "clip-cleaner": Eraser,
   misspell: SpellCheck,
   date: CalendarClock,
   ascii: Binary,
@@ -55,11 +57,19 @@ const TOOL_ICONS: Record<ToolId, LucideIcon> = {
   "color-picker": Pipette,
 };
 
-const EXPANSION_CHILD_IDS = ["misspell", "date", "ascii"] as const satisfies readonly ToolId[];
-const EXPANSION_CHILD_ID_SET = new Set<ToolId>(EXPANSION_CHILD_IDS);
+const MENU_CHILDREN = {
+  expansion: ["misspell", "date", "ascii"],
+} as const satisfies Partial<Record<ToolId, readonly ToolId[]>>;
 
-function isExpansionGroup(tool: ToolId) {
-  return tool === "expansion" || EXPANSION_CHILD_ID_SET.has(tool);
+const CHILD_IDS = new Set<ToolId>(Object.values(MENU_CHILDREN).flat());
+
+function childrenOf(parent: ToolId) {
+  return MENU_CHILDREN[parent as keyof typeof MENU_CHILDREN] ?? [];
+}
+
+function groupOpen(parent: ToolId, current: ToolId) {
+  const children = childrenOf(parent);
+  return children.length > 0 && (current === parent || (children as readonly ToolId[]).includes(current));
 }
 
 const SIDEBAR_WIDTH_KEY = "ce-desktop-tools.sidebar-width";
@@ -199,13 +209,11 @@ export function AppSidebar({ tool, locked, lockSeconds, onSelect }: AppSidebarPr
     <div id="app-sidebar-shell" style={{ width }} className="relative z-10 flex shrink-0">
       <aside id="app-sidebar" className="flex min-h-0 min-w-0 flex-1 flex-col justify-between border-r border-zinc-800 bg-zinc-900">
         <nav id="app-menu" aria-label="Pages" className="flex min-h-0 flex-col gap-0.5 overflow-y-auto px-2 pt-2">
-          {TOOLS.filter((entry) => !EXPANSION_CHILD_ID_SET.has(entry.id)).map((entry) => {
+          {TOOLS.filter((entry) => !CHILD_IDS.has(entry.id)).map((entry) => {
             const selected = tool === entry.id;
             const Icon = TOOL_ICONS[entry.id];
-            const expansionOpen = entry.id === "expansion" && isExpansionGroup(tool);
-            const expansionChildren = expansionOpen
-              ? TOOLS.filter((child) => EXPANSION_CHILD_ID_SET.has(child.id))
-              : [];
+            const open = groupOpen(entry.id, tool);
+            const children = open ? TOOLS.filter((child) => (childrenOf(entry.id) as readonly ToolId[]).includes(child.id)) : [];
 
             return (
               <div id={`app-menu-${entry.id}-group`} key={entry.id} className="flex flex-col gap-0.5">
@@ -213,13 +221,13 @@ export function AppSidebar({ tool, locked, lockSeconds, onSelect }: AppSidebarPr
                   id={`app-menu-${entry.id}`}
                   type="button"
                   aria-current={selected ? "page" : undefined}
-                  aria-expanded={entry.id === "expansion" ? expansionOpen : undefined}
+                  aria-expanded={childrenOf(entry.id).length > 0 ? open : undefined}
                   onClick={() => onSelect(entry.id)}
                   className={cn(
                     "flex w-full items-center gap-2 rounded-md px-2.5 py-1 text-left text-xs",
                     selected
                       ? "bg-zinc-800 font-medium text-zinc-100"
-                      : entry.id === "expansion" && expansionOpen
+                      : open
                         ? "text-zinc-100 hover:bg-zinc-800"
                         : "text-zinc-300 hover:bg-zinc-800",
                   )}
@@ -255,14 +263,14 @@ export function AppSidebar({ tool, locked, lockSeconds, onSelect }: AppSidebarPr
                     )
                   ) : null}
                 </button>
-                {expansionChildren.length > 0 ? (
+                {children.length > 0 ? (
                   <div
-                    id="app-menu-expansion-children"
+                    id={`app-menu-${entry.id}-children`}
                     role="group"
-                    aria-label="Text Expansion tools"
-                    className="flex flex-col gap-0.5 border-l border-zinc-700 ml-4 pl-1.5"
+                    aria-label={`${entry.label} tools`}
+                    className="ml-4 flex flex-col gap-0.5 border-l border-zinc-700 pl-1.5"
                   >
-                    {expansionChildren.map((child) => {
+                    {children.map((child) => {
                       const childSelected = tool === child.id;
                       const ChildIcon = TOOL_ICONS[child.id];
                       return (

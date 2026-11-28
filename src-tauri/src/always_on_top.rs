@@ -239,7 +239,11 @@ fn excluded(list: &[String], exe: &str) -> bool {
     let stem = exe.strip_suffix(".exe").unwrap_or(&exe).to_string();
     list.iter().any(|entry| {
         let entry = entry.trim().to_lowercase();
-        let entry = entry.rsplit(['\\', '/']).next().unwrap_or(&entry).to_string();
+        let entry = entry
+            .rsplit(['\\', '/'])
+            .next()
+            .unwrap_or(&entry)
+            .to_string();
         entry == exe || entry == stem
     })
 }
@@ -284,7 +288,13 @@ fn border_rgb(file: &AlwaysOnTopFile) -> [u8; 3] {
 
 /// Coverage of a pixel center by a ring between two rounded rectangles.
 /// `inner` is the window, `thickness` grows it outward.
-fn ring_coverage(px: f64, py: f64, inner: (f64, f64, f64, f64), radius: f64, thickness: f64) -> f64 {
+fn ring_coverage(
+    px: f64,
+    py: f64,
+    inner: (f64, f64, f64, f64),
+    radius: f64,
+    thickness: f64,
+) -> f64 {
     fn rounded_distance(px: f64, py: f64, rect: (f64, f64, f64, f64), radius: f64) -> f64 {
         let (left, top, right, bottom) = rect;
         let cx = (left + right) / 2.0;
@@ -297,7 +307,12 @@ fn ring_coverage(px: f64, py: f64, inner: (f64, f64, f64, f64), radius: f64, thi
         outside + dx.max(dy).min(0.0) - radius
     }
     let (left, top, right, bottom) = inner;
-    let outer = (left - thickness, top - thickness, right + thickness, bottom + thickness);
+    let outer = (
+        left - thickness,
+        top - thickness,
+        right + thickness,
+        bottom + thickness,
+    );
     let outside_outer = rounded_distance(px, py, outer, radius + thickness);
     let outside_inner = rounded_distance(px, py, inner, radius);
     let in_outer = (0.5 - outside_outer).clamp(0.0, 1.0);
@@ -319,14 +334,14 @@ mod worker {
     use windows::Win32::UI::HiDpi::GetDpiForWindow;
     use windows::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, EVENT_OBJECT_DESTROY,
-        EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW,
-        EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZESTART,
-        GWL_EXSTYLE, GetClassNameW, GetMessageW, GetWindowLongPtrW, GetWindowRect, HTTRANSPARENT,
-        HWND_NOTOPMOST, HWND_TOPMOST, IsIconic, IsWindow, IsWindowVisible, MSG, RegisterClassW,
-        SW_HIDE, SW_SHOWNOACTIVATE, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-        SetTimer, SetWindowPos, ShowWindow, TranslateMessage, ULW_ALPHA, UpdateLayeredWindow,
-        WINEVENT_OUTOFCONTEXT, WM_APP, WM_NCHITTEST, WM_TIMER, WNDCLASSW, WS_EX_LAYERED,
-        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+        EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW, EVENT_SYSTEM_FOREGROUND,
+        EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZESTART, GWL_EXSTYLE, GetClassNameW,
+        GetMessageW, GetWindowLongPtrW, GetWindowRect, HTTRANSPARENT, HWND_NOTOPMOST, HWND_TOPMOST,
+        IsIconic, IsWindow, IsWindowVisible, MSG, RegisterClassW, SW_HIDE, SW_SHOWNOACTIVATE,
+        SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetTimer, SetWindowPos,
+        ShowWindow, TranslateMessage, ULW_ALPHA, UpdateLayeredWindow, WINEVENT_OUTOFCONTEXT,
+        WM_APP, WM_NCHITTEST, WM_TIMER, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+        WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
     };
     use windows::core::{PCWSTR, w};
 
@@ -535,7 +550,11 @@ mod worker {
         }
         let hwnd = unsafe {
             CreateWindowExW(
-                WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
+                WS_EX_LAYERED
+                    | WS_EX_TRANSPARENT
+                    | WS_EX_TOOLWINDOW
+                    | WS_EX_NOACTIVATE
+                    | WS_EX_TOPMOST,
                 CLASS_NAME,
                 w!(""),
                 WS_POPUP,
@@ -695,13 +714,8 @@ mod worker {
                     x = width - reach;
                     continue;
                 }
-                let coverage = super::ring_coverage(
-                    f64::from(x) + 0.5,
-                    f64::from(y) + 0.5,
-                    inner,
-                    radius,
-                    t,
-                );
+                let coverage =
+                    super::ring_coverage(f64::from(x) + 0.5, f64::from(y) + 0.5, inner, radius, t);
                 let alpha = (coverage * 255.0).round() as u32;
                 let index = ((y * width + x) * 4) as usize;
                 bytes[index] = ((u32::from(rgb[2]) * alpha) / 255) as u8;

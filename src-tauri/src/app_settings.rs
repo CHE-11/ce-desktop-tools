@@ -150,6 +150,8 @@ struct PortableFile {
     screen_ruler: crate::screen_ruler::ScreenRulerFile,
     #[serde(default)]
     color_picker: crate::color_picker::ColorPickerFile,
+    #[serde(default)]
+    clip_cleaner: crate::clipboard::ClipCleanerFile,
 }
 
 const TERMINAL_SHELLS: &[&str] = &["cmd", "powershell", "pwsh"];
@@ -232,6 +234,7 @@ impl Default for PortableFile {
             always_on_top: crate::always_on_top::AlwaysOnTopFile::default(),
             screen_ruler: crate::screen_ruler::ScreenRulerFile::default(),
             color_picker: crate::color_picker::ColorPickerFile::default(),
+            clip_cleaner: crate::clipboard::ClipCleanerFile::default(),
         }
     }
 }
@@ -516,6 +519,10 @@ fn read_local(app: &AppHandle) -> Result<PortableFile, String> {
             .get("colorPicker")
             .and_then(|value| serde_json::from_value(value).ok())
             .unwrap_or_default(),
+        clip_cleaner: settings
+            .get("clipCleaner")
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default(),
     };
     file.normalize_in_place();
     Ok(file)
@@ -540,6 +547,7 @@ fn write_local(app: &AppHandle, file: &PortableFile) -> Result<(), String> {
     store.set("alwaysOnTop", json!(file.always_on_top));
     store.set("screenRuler", json!(file.screen_ruler));
     store.set("colorPicker", json!(file.color_picker));
+    store.set("clipCleaner", json!(file.clip_cleaner));
     store.set(POINTER_KEY, "");
     store.save().map_err(|error| error.to_string())
 }
@@ -696,6 +704,7 @@ impl PortableFile {
         self.always_on_top.normalize();
         self.screen_ruler.normalize();
         self.color_picker.normalize();
+        self.clip_cleaner.normalize();
     }
 }
 
@@ -719,9 +728,7 @@ pub fn save_always_on_top(
     Ok(saved)
 }
 
-pub fn load_screen_ruler(
-    app: &AppHandle,
-) -> Result<crate::screen_ruler::ScreenRulerFile, String> {
+pub fn load_screen_ruler(app: &AppHandle) -> Result<crate::screen_ruler::ScreenRulerFile, String> {
     with_settings_lock(|| {
         let mut file = load_locked(app)?.file.screen_ruler;
         file.normalize();
@@ -739,9 +746,7 @@ pub fn save_screen_ruler(
     Ok(saved)
 }
 
-pub fn load_color_picker(
-    app: &AppHandle,
-) -> Result<crate::color_picker::ColorPickerFile, String> {
+pub fn load_color_picker(app: &AppHandle) -> Result<crate::color_picker::ColorPickerFile, String> {
     with_settings_lock(|| {
         let mut file = load_locked(app)?.file.color_picker;
         file.normalize();
@@ -756,6 +761,24 @@ pub fn save_color_picker(
     next.normalize();
     let saved = next.clone();
     save_section(app, move |file| file.color_picker = next)?;
+    Ok(saved)
+}
+
+pub fn load_clip_cleaner(app: &AppHandle) -> Result<crate::clipboard::ClipCleanerFile, String> {
+    with_settings_lock(|| {
+        let mut file = load_locked(app)?.file.clip_cleaner;
+        file.normalize();
+        Ok(file)
+    })
+}
+
+pub fn save_clip_cleaner(
+    app: &AppHandle,
+    mut next: crate::clipboard::ClipCleanerFile,
+) -> Result<crate::clipboard::ClipCleanerFile, String> {
+    next.normalize();
+    let saved = next.clone();
+    save_section(app, move |file| file.clip_cleaner = next)?;
     Ok(saved)
 }
 
@@ -1077,6 +1100,8 @@ mod tests {
         assert_eq!(loaded.screen_ruler.default_measure_style, "none");
         assert_eq!(loaded.color_picker.hotkey, "Shift+Win+C");
         assert_eq!(loaded.color_picker.default_format, "HEX");
+        assert!(!loaded.clip_cleaner.enabled);
+        assert!(loaded.clip_cleaner.rules.is_empty());
         assert!(
             loaded
                 .color_picker
@@ -1089,6 +1114,14 @@ mod tests {
         next.always_on_top.border_thickness = 4;
         next.screen_ruler.pixel_tolerance = 12;
         next.color_picker.show_color_name = true;
+        next.clip_cleaner.enabled = true;
+        next.clip_cleaner.rules.push(crate::clipboard::ClipRule {
+            id: "trim".into(),
+            enabled: true,
+            find: "\\s+$".into(),
+            replace: String::new(),
+            case_insensitive: false,
+        });
         next.theme = "nord".into();
         next.color_mode = "light".into();
         next.toolbar_labels = true;
@@ -1115,6 +1148,10 @@ mod tests {
         assert!(raw.contains("\"alwaysOnTop\""));
         assert!(raw.contains("\"screenRuler\""));
         assert!(raw.contains("\"colorPicker\""));
+        assert!(raw.contains("\"clipCleaner\""));
+        assert!(saved.clip_cleaner.enabled);
+        assert_eq!(saved.clip_cleaner.rules.len(), 1);
+        assert_eq!(saved.clip_cleaner.rules[0].find, "\\s+$");
         assert_eq!(saved.always_on_top.border_thickness, 4);
         assert_eq!(saved.screen_ruler.pixel_tolerance, 12);
         assert!(saved.color_picker.show_color_name);

@@ -131,15 +131,18 @@ impl Terminals {
             cwd,
             title: info.label.clone(),
         };
-        self.sessions.lock().unwrap_or_else(|p| p.into_inner()).insert(
-            id.clone(),
-            Arc::new(Session {
-                info: session.clone(),
-                master: Mutex::new(pair.master),
-                writer: Mutex::new(writer),
-                killer: Mutex::new(child.clone_killer()),
-            }),
-        );
+        self.sessions
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(
+                id.clone(),
+                Arc::new(Session {
+                    info: session.clone(),
+                    master: Mutex::new(pair.master),
+                    writer: Mutex::new(writer),
+                    killer: Mutex::new(child.clone_killer()),
+                }),
+            );
 
         let reader_app = app.clone();
         let reader_id = id.clone();
@@ -157,7 +160,10 @@ impl Terminals {
                             if !data.is_empty() {
                                 let _ = reader_app.emit(
                                     "terminal-output",
-                                    OutputEvent { id: &reader_id, data },
+                                    OutputEvent {
+                                        id: &reader_id,
+                                        data,
+                                    },
                                 );
                             }
                         }
@@ -196,7 +202,11 @@ impl Terminals {
 
     pub fn kill(&self, id: &str) {
         if let Ok(session) = self.get(id) {
-            let _ = session.killer.lock().unwrap_or_else(|p| p.into_inner()).kill();
+            let _ = session
+                .killer
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .kill();
         }
         self.remove(id);
     }
@@ -223,7 +233,11 @@ impl Terminals {
             .map(|session| session.info.clone())
             .collect();
         sessions.sort_by_key(|session| {
-            session.id.trim_start_matches("term-").parse::<u64>().unwrap_or(0)
+            session
+                .id
+                .trim_start_matches("term-")
+                .parse::<u64>()
+                .unwrap_or(0)
         });
         sessions
     }
@@ -281,7 +295,11 @@ fn system_root() -> PathBuf {
 }
 
 fn system_exe(name: &str) -> String {
-    system_root().join("System32").join(name).display().to_string()
+    system_root()
+        .join("System32")
+        .join(name)
+        .display()
+        .to_string()
 }
 
 fn windows_powershell() -> String {
@@ -295,7 +313,8 @@ fn pwsh_path() -> Option<PathBuf> {
     if let Some(found) = which("pwsh.exe") {
         return Some(found);
     }
-    let program_files = std::env::var("ProgramFiles").unwrap_or_else(|_| "C:\\Program Files".into());
+    let program_files =
+        std::env::var("ProgramFiles").unwrap_or_else(|_| "C:\\Program Files".into());
     let candidate = Path::new(&program_files).join(r"PowerShell\7\pwsh.exe");
     candidate.is_file().then_some(candidate)
 }

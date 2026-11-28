@@ -1,8 +1,8 @@
 import { listen } from "@tauri-apps/api/event";
-import { Lock, Pin, PinOff, Trash2 } from "lucide-react";
+import { Lock, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ClipboardState } from "../../../../types/clipboard";
-import { clipboardClear, clipboardClearWindows, clipboardCopy, clipboardDelete, clipboardSetPinned, clipboardState } from "../../lib/clipboard-client";
+import { clipboardClear, clipboardClearWindows, clipboardCopy, clipboardDelete, clipboardState } from "../../lib/clipboard-client";
 import { messageOf } from "../../lib/message";
 import { Button } from "../Button";
 import { VaultLock } from "../VaultLock";
@@ -57,15 +57,15 @@ export function Clipboard({ settingsFolder, locked, needsPin, busy, focusNonce, 
   return (
     <section id="clipboard-tool" className="flex min-h-0 min-w-0 flex-1 flex-col">
       <header id="clipboard-header" className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3">
-        <div id="clipboard-heading" className="min-w-0">
-          <h1 id="clipboard-title" className="text-base font-semibold text-zinc-100">
-            Clipboard
-          </h1>
-          <p id="clipboard-file" className="mt-1 text-xs text-zinc-500">
-            Recent text copies, saved in clipboard.json next to the settings file.
-          </p>
-        </div>
-        <div id="clipboard-actions" className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <div id="clipboard-heading" className="min-w-0">
+            <h1 id="clipboard-title" className="text-base font-semibold text-zinc-100">
+              Clipboard
+            </h1>
+            <p id="clipboard-file" className="mt-1 text-xs text-zinc-500">
+              Recent text copies, saved in clipboard.json next to the settings file.
+            </p>
+          </div>
+          <div id="clipboard-actions" className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <Button
             id="clipboard-clear-windows"
             variant="outline"
@@ -102,7 +102,7 @@ export function Clipboard({ settingsFolder, locked, needsPin, busy, focusNonce, 
             onUnlock={onUnlock}
             onLock={onLock}
           />
-        </div>
+          </div>
       </header>
       {history.error || error ? (
         <p id="clipboard-error" className="border-b border-red-900 bg-red-950/40 px-4 py-2 text-sm text-red-300">
@@ -119,9 +119,9 @@ export function Clipboard({ settingsFolder, locked, needsPin, busy, focusNonce, 
           </Button>
         </div>
       ) : locked || needsPin ? (
-        <div className="flex flex-col gap-2 w-full h-full items-center justify-center">
-          <Lock className="size-10 text-zinc-400" />
-          <h2>Clipboard Locked</h2>
+        <div id="clipboard-locked" className="flex h-full w-full flex-col items-center justify-center gap-2">
+          <Lock id="clipboard-locked-icon" className="size-10 text-zinc-400" />
+          <h2 id="clipboard-locked-title">Clipboard Locked</h2>
           <p id="clipboard-locked-message" className="text-sm text-zinc-400">
             Enter the PIN to unlock it.
           </p>
@@ -152,7 +152,7 @@ export function Clipboard({ settingsFolder, locked, needsPin, busy, focusNonce, 
               <th id="clipboard-col-text" className="border-b border-zinc-800 px-3 py-2 text-xs font-medium text-zinc-400">
                 Text
               </th>
-              <th id="clipboard-col-actions" className="w-20 border-b border-zinc-800" />
+              <th id="clipboard-col-actions" className="w-10 border-b border-zinc-800" />
             </tr>
           </thead>
           <tbody id="clipboard-body">
@@ -181,20 +181,6 @@ export function Clipboard({ settingsFolder, locked, needsPin, busy, focusNonce, 
                     </td>
                     <td id={`clipboard-actions-${rowId}`} className="px-1 py-1">
                       <div id={`clipboard-actions-row-${rowId}`} className="flex items-center justify-end">
-                        <button
-                          id={`clipboard-pin-${rowId}`}
-                          type="button"
-                          title={clip.pinned ? "Unpin" : "Pin"}
-                          aria-pressed={clip.pinned}
-                          onClick={() => void clipboardSetPinned(clip.id, !clip.pinned).then(setHistory).catch((caught) => setError(messageOf(caught)))}
-                          className="inline-flex size-7 items-center justify-center rounded text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-                        >
-                          {clip.pinned ? (
-                            <Pin id={`clipboard-pin-icon-${rowId}`} className="size-3.5 text-sky-300" aria-hidden="true" />
-                          ) : (
-                            <PinOff id={`clipboard-pin-icon-${rowId}`} className="size-3.5" aria-hidden="true" />
-                          )}
-                        </button>
                         <button
                           id={`clipboard-delete-${rowId}`}
                           type="button"

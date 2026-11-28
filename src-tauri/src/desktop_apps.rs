@@ -110,10 +110,7 @@ fn reserved(name: &str) -> bool {
 
 fn valid_app_id(app_id: &str) -> bool {
     // Desktop AppIDs often look like `{GUID}\Vendor\App\app.exe`.
-    !app_id.is_empty()
-        && app_id
-            .chars()
-            .all(|ch| !ch.is_control() && ch != '"')
+    !app_id.is_empty() && app_id.chars().all(|ch| !ch.is_control() && ch != '"')
 }
 
 #[cfg(windows)]

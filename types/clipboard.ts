@@ -10,3 +10,21 @@ export type ClipboardState = {
   clips: Clip[];
   error: string | null;
 };
+
+export type ClipRule = {
+  id: string;
+  enabled: boolean;
+  find: string;
+  replace: string;
+  caseInsensitive: boolean;
+};
+
+export type ClipCleaner = {
+  enabled: boolean;
+  rules: ClipRule[];
+};
+
+export type ClipCleanerPreview = {
+  text: string;
+  error: string | null;
+};

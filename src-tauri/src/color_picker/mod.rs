@@ -454,7 +454,17 @@ mod overlay {
 
         fn paint(&mut self, dc: HDC, width: i32, height: i32) {
             unsafe {
-                let _ = BitBlt(dc, 0, 0, width, height, Some(self.capture.dc), 0, 0, SRCCOPY);
+                let _ = BitBlt(
+                    dc,
+                    0,
+                    0,
+                    width,
+                    height,
+                    Some(self.capture.dc),
+                    0,
+                    0,
+                    SRCCOPY,
+                );
             }
             let scale = self.scale();
             let size = (150.0 * scale).round() as i32;
@@ -493,12 +503,43 @@ mod overlay {
             }
             let center = left + (cells / 2) * cell;
             let middle = top + (cells / 2) * cell;
-            outline(dc, center - 1, middle - 1, center + cell + 1, middle + cell + 1, [0, 0, 0], 1);
-            outline(dc, center, middle, center + cell, middle + cell, [255, 255, 255], 1);
+            outline(
+                dc,
+                center - 1,
+                middle - 1,
+                center + cell + 1,
+                middle + cell + 1,
+                [0, 0, 0],
+                1,
+            );
+            outline(
+                dc,
+                center,
+                middle,
+                center + cell,
+                middle + cell,
+                [255, 255, 255],
+                1,
+            );
             let color = self.color().unwrap_or(Rgb { r: 0, g: 0, b: 0 });
-            fill(dc, left, top + size, left + size, top + size + swatch, [color.r, color.g, color.b]);
+            fill(
+                dc,
+                left,
+                top + size,
+                left + size,
+                top + size + swatch,
+                [color.r, color.g, color.b],
+            );
             let border = (2.0 * scale).round().max(1.0) as i32;
-            outline(dc, left - border, top - border, left + size + border, top + size + swatch + border, [24, 24, 27], border);
+            outline(
+                dc,
+                left - border,
+                top - border,
+                left + size + border,
+                top + size + swatch + border,
+                [24, 24, 27],
+                border,
+            );
 
             let mut lines = vec![formats::render(&self.settings.default_template(), color)];
             if self.settings.show_color_name {

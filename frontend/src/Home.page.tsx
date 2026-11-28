@@ -14,6 +14,7 @@ import { DateExpander } from "./components/Tools/DateExpander";
 import { AsciiCodes } from "./components/Tools/AsciiCodes";
 import { CalculatorUnits } from "./components/Tools/CalculatorUnits";
 import { Clipboard } from "./components/Tools/Clipboard";
+import { ClipCleaner } from "./components/Tools/ClipCleaner";
 import { KeyboardShortcuts } from "./components/Tools/KeyboardShortcuts";
 import { BatchRename } from "./components/Tools/BatchRename";
 import { Pantherbar } from "./components/Tools/Pantherbar/Pantherbar";
@@ -339,6 +340,7 @@ export function HomePage() {
               onLock={lock}
             />
           ) : null}
+          {tool === "clip-cleaner" ? <ClipCleaner /> : null}
           {tool === "app-shortcuts" ? <KeyboardShortcuts onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "rename" ? <BatchRename /> : null}
           {tool === "pantherbar" ? <Pantherbar /> : null}
