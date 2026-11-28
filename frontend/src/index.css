@@ -456,7 +456,13 @@ html[data-window="launcher"] body,
 html[data-window="launcher"] #root,
 html[data-window="screen-ruler"],
 html[data-window="screen-ruler"] body,
-html[data-window="screen-ruler"] #root {
+html[data-window="screen-ruler"] #root,
+html[data-window="record"],
+html[data-window="record"] body,
+html[data-window="record"] #root,
+html[data-window="present"],
+html[data-window="present"] body,
+html[data-window="present"] #root {
   background: transparent;
 }
 

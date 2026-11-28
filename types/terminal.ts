@@ -11,7 +11,13 @@ export type TerminalSession = {
   shell: ShellKind;
   cwd: string;
   title: string;
+  admin: boolean;
 };
+
+/** In-app tab, or an elevated console opened in its own window after UAC. */
+export type TerminalSpawnResult =
+  | { kind: "session"; session: TerminalSession }
+  | { kind: "externalWindow" };
 
 export type TerminalOutputEvent = {
   id: string;

@@ -21,7 +21,9 @@ mod misspell;
 mod overlay;
 mod pantherbar;
 mod paste_plain;
+mod present;
 mod processes;
+mod record;
 mod rename;
 mod screen_capture;
 mod screen_ruler;
@@ -89,6 +91,12 @@ fn save_app_settings(
     }
     if let Some(clipboard) = app.try_state::<clipboard::Clipboard>() {
         clipboard.reload_cleaner();
+    }
+    if let Some(record) = app.try_state::<record::Record>() {
+        record.reload();
+    }
+    if let Some(present) = app.try_state::<present::Present>() {
+        present.reload();
     }
     Ok(saved)
 }
@@ -714,11 +722,15 @@ async fn terminal_spawn(
     cwd: Option<String>,
     cols: u16,
     rows: u16,
-) -> Result<terminal::TerminalSession, String> {
+    admin: Option<bool>,
+) -> Result<terminal::SpawnResult, String> {
     let terminals = terminals.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || terminals.spawn(app, &shell, cwd, cols, rows))
-        .await
-        .map_err(|error| error.to_string())?
+    let admin = admin.unwrap_or(false);
+    tauri::async_runtime::spawn_blocking(move || {
+        terminals.spawn(app, &shell, cwd, cols, rows, admin)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -943,6 +955,8 @@ pub fn run() {
             app.manage(always_on_top::AlwaysOnTop::start(app.handle().clone()));
             app.manage(screen_ruler::ScreenRuler::start(app.handle().clone()));
             app.manage(color_picker::ColorPicker::start(app.handle().clone()));
+            app.manage(record::Record::start(app.handle().clone()));
+            app.manage(present::Present::start(app.handle().clone()));
             hotkeys::spawn(app.handle().clone());
             app.manage(folder_rules::FolderRules::start(app.handle().clone()));
             app.manage(terminal::Terminals::default());
@@ -1070,6 +1084,55 @@ pub fn run() {
             port_owners,
             file_lockers,
             app_calls,
+            record::commands::record_state,
+            record::commands::record_save,
+            record::commands::record_targets,
+            record::commands::record_pick_region,
+            record::commands::record_start,
+            record::commands::record_stop,
+            record::commands::record_pause,
+            record::commands::record_resume,
+            record::commands::record_status,
+            record::commands::record_set_mic_muted,
+            record::commands::record_set_controls_mode,
+            record::commands::record_set_camera_corner,
+            record::commands::record_set_cursor,
+            record::commands::record_set_camera,
+            record::commands::record_set_drawing,
+            record::commands::record_set_style,
+            record::commands::record_erase,
+            record::commands::record_add_stroke,
+            record::commands::record_set_draft,
+            record::commands::record_clear_strokes,
+            record::commands::record_undo_stroke,
+            record::commands::record_append_camera,
+            record::commands::record_library,
+            record::commands::record_update,
+            record::commands::record_delete,
+            record::commands::record_export,
+            record::commands::record_media_url,
+            record::commands::record_begin_export,
+            record::commands::record_append_export,
+            record::commands::record_finish_export,
+            present::commands::present_settings,
+            present::commands::present_save,
+            present::commands::present_state,
+            present::commands::present_toggle,
+            present::commands::present_close,
+            present::commands::present_set_tool,
+            present::commands::present_set_cursor,
+            present::commands::present_set_color,
+            present::commands::present_set_width,
+            present::commands::present_set_dim,
+            present::commands::present_set_radius,
+            present::commands::present_set_spread,
+            present::commands::present_set_circle,
+            present::commands::present_push_mark,
+            present::commands::present_undo,
+            present::commands::present_clear,
+            present::commands::present_finish_place,
+            present::commands::present_hold_escape,
+            present::commands::present_release_cursor,
             dev_feedback_probe,
             dev_feedback_push
         ])
@@ -1084,6 +1147,8 @@ pub fn run() {
                     terminals.kill_all();
                 }
                 always_on_top::unpin_all();
+                record::abandon();
+                present::shutdown();
                 let _ = stay_awake::set(app, false);
                 #[cfg(debug_assertions)]
                 dev_feedback::clear_port_file();

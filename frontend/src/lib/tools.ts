@@ -20,6 +20,8 @@ export const TOOLS = [
   { id: "always-on-top", label: "Always On Top", lockable: false },
   { id: "screen-ruler", label: "Screen Ruler", lockable: false },
   { id: "color-picker", label: "Color Picker", lockable: false },
+  { id: "record", label: "Record", lockable: false },
+  { id: "present", label: "Present", lockable: false },
 ] as const;
 
 export type ToolId = (typeof TOOLS)[number]["id"];

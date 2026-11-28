@@ -10,6 +10,11 @@ import "./index.css";
 import { applyDensity, readDensity } from "./lib/density";
 import { ColorEditorWindow } from "./components/Tools/ColorPicker/ColorEditorWindow";
 import { RulerToolbar } from "./components/Tools/ScreenRuler/RulerToolbar";
+import { PresentPalette } from "./components/Tools/Present/PresentPalette";
+import { PresentStageWindow } from "./components/Tools/Present/PresentStageWindow";
+import { RecordCamera } from "./components/Tools/Record/RecordCamera";
+import { RecordControls } from "./components/Tools/Record/RecordControls";
+import { RecordDraw } from "./components/Tools/Record/RecordDraw";
 
 if (import.meta.env.DEV) {
   installDevConsole();
@@ -25,7 +30,16 @@ const pantherbarWindow = window.__PANTHERBAR__ === true;
 const launcherWindow = window.__LAUNCHER__ === true;
 const screenRulerWindow = window.__SCREEN_RULER__ === true;
 const colorPickerWindow = window.__COLOR_PICKER__ === true;
-if (pantherbarWindow) {
+const recordControlsWindow = window.__RECORD_CONTROLS__ === true;
+const recordCameraWindow = window.__RECORD_CAMERA__ === true;
+const recordDrawWindow = window.__RECORD_DRAW__ === true;
+const presentStage = typeof window.__PRESENT_STAGE__ === "number" ? window.__PRESENT_STAGE__ : null;
+const presentPaletteWindow = window.__PRESENT_PALETTE__ === true;
+if (recordControlsWindow || recordCameraWindow || recordDrawWindow) {
+  document.documentElement.dataset.window = "record";
+} else if (presentStage !== null || presentPaletteWindow) {
+  document.documentElement.dataset.window = "present";
+} else if (pantherbarWindow) {
   document.documentElement.dataset.window = "pantherbar";
 } else if (launcherWindow) {
   document.documentElement.dataset.window = "launcher";
@@ -41,6 +55,21 @@ if (!root) {
 }
 
 function WindowContent() {
+  if (recordControlsWindow) {
+    return <RecordControls />;
+  }
+  if (recordCameraWindow) {
+    return <RecordCamera />;
+  }
+  if (recordDrawWindow) {
+    return <RecordDraw />;
+  }
+  if (presentStage !== null) {
+    return <PresentStageWindow monitor={presentStage} />;
+  }
+  if (presentPaletteWindow) {
+    return <PresentPalette />;
+  }
   if (pantherbarWindow) {
     return <PantherbarBar />;
   }

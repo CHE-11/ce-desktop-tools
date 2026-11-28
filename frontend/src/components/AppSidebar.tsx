@@ -16,12 +16,14 @@ import {
   Lock,
   Pin,
   Pipette,
+  Presentation,
   RulerDimensionLine,
   Search,
   SpellCheck,
   SquareTerminal,
   Type,
   Unlock,
+  Video,
   type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
@@ -55,6 +57,8 @@ const TOOL_ICONS: Record<ToolId, LucideIcon> = {
   "always-on-top": Pin,
   "screen-ruler": RulerDimensionLine,
   "color-picker": Pipette,
+  record: Video,
+  present: Presentation,
 };
 
 const MENU_CHILDREN = {

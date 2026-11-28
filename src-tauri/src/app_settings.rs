@@ -152,6 +152,10 @@ struct PortableFile {
     color_picker: crate::color_picker::ColorPickerFile,
     #[serde(default)]
     clip_cleaner: crate::clipboard::ClipCleanerFile,
+    #[serde(default)]
+    record: crate::record::RecordFile,
+    #[serde(default)]
+    present: crate::present::PresentFile,
 }
 
 const TERMINAL_SHELLS: &[&str] = &["cmd", "powershell", "pwsh"];
@@ -235,6 +239,8 @@ impl Default for PortableFile {
             screen_ruler: crate::screen_ruler::ScreenRulerFile::default(),
             color_picker: crate::color_picker::ColorPickerFile::default(),
             clip_cleaner: crate::clipboard::ClipCleanerFile::default(),
+            record: crate::record::RecordFile::default(),
+            present: crate::present::PresentFile::default(),
         }
     }
 }
@@ -523,6 +529,14 @@ fn read_local(app: &AppHandle) -> Result<PortableFile, String> {
             .get("clipCleaner")
             .and_then(|value| serde_json::from_value(value).ok())
             .unwrap_or_default(),
+        record: settings
+            .get("record")
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default(),
+        present: settings
+            .get("present")
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default(),
     };
     file.normalize_in_place();
     Ok(file)
@@ -548,6 +562,8 @@ fn write_local(app: &AppHandle, file: &PortableFile) -> Result<(), String> {
     store.set("screenRuler", json!(file.screen_ruler));
     store.set("colorPicker", json!(file.color_picker));
     store.set("clipCleaner", json!(file.clip_cleaner));
+    store.set("record", json!(file.record));
+    store.set("present", json!(file.present));
     store.set(POINTER_KEY, "");
     store.save().map_err(|error| error.to_string())
 }
@@ -705,7 +721,45 @@ impl PortableFile {
         self.screen_ruler.normalize();
         self.color_picker.normalize();
         self.clip_cleaner.normalize();
+        self.record.normalize();
+        self.present.normalize();
     }
+}
+
+pub fn load_record(app: &AppHandle) -> Result<crate::record::RecordFile, String> {
+    with_settings_lock(|| {
+        let mut file = load_locked(app)?.file.record;
+        file.normalize();
+        Ok(file)
+    })
+}
+
+pub fn save_record(
+    app: &AppHandle,
+    mut next: crate::record::RecordFile,
+) -> Result<crate::record::RecordFile, String> {
+    next.normalize();
+    let saved = next.clone();
+    save_section(app, move |file| file.record = next)?;
+    Ok(saved)
+}
+
+pub fn load_present(app: &AppHandle) -> Result<crate::present::PresentFile, String> {
+    with_settings_lock(|| {
+        let mut file = load_locked(app)?.file.present;
+        file.normalize();
+        Ok(file)
+    })
+}
+
+pub fn save_present(
+    app: &AppHandle,
+    mut next: crate::present::PresentFile,
+) -> Result<crate::present::PresentFile, String> {
+    next.normalize();
+    let saved = next.clone();
+    save_section(app, move |file| file.present = next)?;
+    Ok(saved)
 }
 
 pub fn load_always_on_top(

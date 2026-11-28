@@ -1,6 +1,6 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ClipboardCopy, Copy, Eraser, FolderOpen, Minus, Plus, ScrollText, Search, X } from "lucide-react";
+import { ClipboardCopy, Copy, Eraser, FolderOpen, Minus, Plus, ScrollText, Search, Shield, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TerminalScript, TerminalSettings } from "../../../../../types/app";
 import type { ShellInfo, ShellKind, TerminalSession } from "../../../../../types/terminal";
@@ -51,6 +51,7 @@ export function TerminalTool({ active }: Props) {
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [newShell, setNewShell] = useState<ShellKind>("powershell");
+  const [asAdmin, setAsAdmin] = useState(false);
   const [cwd, setCwd] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [paste, setPaste] = useState<{ text: string; tabId: string } | null>(null);
@@ -128,17 +129,21 @@ export function TerminalTool({ active }: Props) {
   }, []);
 
   const openTab = useCallback(
-    async (shell: ShellKind, folder: string | null) => {
+    async (shell: ShellKind, folder: string | null, admin: boolean) => {
       try {
-        const session = await terminalSpawn(shell, folder, 120, 30);
-        setTabs((current) => [...current, { ...session, exited: false }]);
-        setActiveId(session.id);
+        const result = await terminalSpawn(shell, folder, 120, 30, admin);
         setError(null);
+        if (result.kind === "externalWindow") {
+          flash("Opened an elevated shell in a new window.");
+          return;
+        }
+        setTabs((current) => [...current, { ...result.session, exited: false }]);
+        setActiveId(result.session.id);
       } catch (caught) {
         setError(messageOf(caught));
       }
     },
-    [],
+    [flash],
   );
 
   useEffect(() => {
@@ -159,7 +164,7 @@ export function TerminalTool({ active }: Props) {
           setTabs(existing.map((session) => ({ ...session, exited: false })));
           setActiveId(existing[0].id);
         } else {
-          await openTab(preferred, null);
+          await openTab(preferred, null, false);
         }
       } catch (caught) {
         setError(messageOf(caught));
@@ -297,11 +302,14 @@ export function TerminalTool({ active }: Props) {
                 <button
                   id={`terminal-tab-${tab.id}-select`}
                   type="button"
-                  className={cn("h-7 max-w-48 truncate", tab.exited && "text-zinc-500 line-through")}
+                  className={cn("flex h-7 max-w-48 items-center gap-1 truncate", tab.exited && "text-zinc-500 line-through")}
                   title={`${tab.title} - ${tab.cwd}\nDouble-click to rename`}
                   onClick={() => setActiveId(tab.id)}
                   onDoubleClick={() => setRenamingId(tab.id)}
                 >
+                  {tab.admin ? (
+                    <Shield id={`terminal-tab-${tab.id}-admin`} className="size-3 shrink-0 text-amber-400" aria-hidden="true" />
+                  ) : null}
                   {tab.title}
                 </button>
               )}
@@ -347,7 +355,28 @@ export function TerminalTool({ active }: Props) {
               {cwd ? baseName(cwd) : "Home"}
             </span>
           </Button>
-          <Button id="terminal-new-tab" variant="secondary" size="sm" title="New tab" onClick={() => void openTab(newShell, cwd)}>
+          <Button
+            id="terminal-new-admin"
+            variant={asAdmin ? "secondary" : "ghost"}
+            size="sm"
+            aria-pressed={asAdmin}
+            title={
+              asAdmin
+                ? "New shells run as administrator. If this app is not elevated, Windows opens a separate elevated console after UAC."
+                : "New shells run as a regular user"
+            }
+            onClick={() => setAsAdmin((value) => !value)}
+          >
+            <Shield id="terminal-new-admin-icon" className={cn("size-3.5", asAdmin && "text-amber-400")} aria-hidden="true" />
+            Admin
+          </Button>
+          <Button
+            id="terminal-new-tab"
+            variant="secondary"
+            size="sm"
+            title={asAdmin ? "New elevated tab" : "New tab"}
+            onClick={() => void openTab(newShell, cwd, asAdmin)}
+          >
             <Plus id="terminal-new-tab-icon" className="size-3.5" aria-hidden="true" />
           </Button>
         </div>
@@ -479,7 +508,7 @@ export function TerminalTool({ active }: Props) {
           {tabs.length === 0 ? (
             <div id="terminal-empty" className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-zinc-500">
               <p id="terminal-empty-copy">No terminals are open.</p>
-              <Button id="terminal-empty-new" variant="primary" onClick={() => void openTab(newShell, cwd)}>
+              <Button id="terminal-empty-new" variant="primary" onClick={() => void openTab(newShell, cwd, asAdmin)}>
                 <Plus id="terminal-empty-new-icon" className="size-3.5" aria-hidden="true" />
                 New terminal
               </Button>

@@ -18,14 +18,18 @@ pub enum HotkeyId {
     AlwaysOnTop = 1,
     ScreenRuler = 2,
     ColorPicker = 3,
+    Record = 4,
+    Present = 5,
 }
 
-const COUNT: usize = 4;
+const COUNT: usize = 6;
 const ALL: [HotkeyId; COUNT] = [
     HotkeyId::Launcher,
     HotkeyId::AlwaysOnTop,
     HotkeyId::ScreenRuler,
     HotkeyId::ColorPicker,
+    HotkeyId::Record,
+    HotkeyId::Present,
 ];
 
 impl HotkeyId {
@@ -39,6 +43,8 @@ impl HotkeyId {
             HotkeyId::AlwaysOnTop => "Always On Top",
             HotkeyId::ScreenRuler => "Screen Ruler",
             HotkeyId::ColorPicker => "Color Picker",
+            HotkeyId::Record => "Record",
+            HotkeyId::Present => "Present",
         }
     }
 }
@@ -67,6 +73,17 @@ const INJECT_MARK: usize = 0xCE70_0E02;
 const MASK_KEY: u16 = 0xE8;
 #[cfg(windows)]
 const FIRE_MESSAGE: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 21;
+/// Escape or Delete that an open Record or Present overlay claimed. `wParam` is a `SpecialKey`.
+#[cfg(windows)]
+const KEY_MESSAGE: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 22;
+
+#[cfg(windows)]
+#[derive(Clone, Copy)]
+enum SpecialKey {
+    RecordEscape = 0,
+    PresentEscape = 1,
+    PresentDelete = 2,
+}
 
 /// A global hotkey needs a modifier. A bare letter would fire while typing.
 pub fn usable_hotkey(value: &str) -> Option<String> {
@@ -131,7 +148,21 @@ fn dispatch(app: &AppHandle, id: HotkeyId) {
         HotkeyId::AlwaysOnTop => crate::always_on_top::hotkey(app),
         HotkeyId::ScreenRuler => crate::screen_ruler::hotkey(app),
         HotkeyId::ColorPicker => crate::color_picker::hotkey(app),
+        HotkeyId::Record => crate::record::hotkey(app),
+        HotkeyId::Present => crate::present::hotkey(app),
     }
+}
+
+/// Runs on its own thread, because Present can wait on the main thread while it closes.
+#[cfg(windows)]
+fn dispatch_key(app: &AppHandle, key: usize) {
+    let app = app.clone();
+    std::thread::spawn(move || match key {
+        0 => crate::record::on_escape(&app),
+        1 => crate::present::on_escape(&app),
+        2 => crate::present::on_delete(&app),
+        _ => {}
+    });
 }
 
 #[cfg(windows)]
@@ -167,6 +198,12 @@ fn run() {
                 }
                 continue;
             }
+            if message.message == KEY_MESSAGE {
+                if let Some(app) = APP.get() {
+                    dispatch_key(app, message.wParam.0);
+                }
+                continue;
+            }
             let _ = TranslateMessage(&message);
             DispatchMessageW(&message);
         }
@@ -198,14 +235,47 @@ unsafe extern "system" fn key_proc(
         }
         return unsafe { CallNextHookEx(None, code, wparam, lparam) };
     }
-    if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN)
+    let typed = (message == WM_KEYDOWN || message == WM_SYSKEYDOWN)
         && info.dwExtraInfo != INJECT_MARK
-        && !info.flags.contains(LLKHF_INJECTED)
-        && pressed(vk)
-    {
+        && !info.flags.contains(LLKHF_INJECTED);
+    if typed && (pressed(vk) || special(vk)) {
         return LRESULT(1);
     }
     unsafe { CallNextHookEx(None, code, wparam, lparam) }
+}
+
+/// Escape leaves Record's drawing or steps Present back, and Delete removes a Present lasso
+/// selection. Other keys, and these keys with Ctrl, Alt, or Win, reach the app in front.
+#[cfg(windows)]
+fn special(vk: u16) -> bool {
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::UI::Input::KeyboardAndMouse::{VK_BACK, VK_DELETE, VK_ESCAPE};
+    use windows::Win32::UI::WindowsAndMessaging::PostThreadMessageW;
+
+    let key = if vk == VK_ESCAPE.0 {
+        if crate::record::escape_is_useful() {
+            SpecialKey::RecordEscape
+        } else if crate::present::escape_is_useful() {
+            SpecialKey::PresentEscape
+        } else {
+            return false;
+        }
+    } else if (vk == VK_DELETE.0 || vk == VK_BACK.0) && crate::present::delete_is_useful() {
+        SpecialKey::PresentDelete
+    } else {
+        return false;
+    };
+    if down(&[0x11, 0xA2, 0xA3]) || down(&[0x12, 0xA4, 0xA5]) || down(&[0x5B, 0x5C]) {
+        return false;
+    }
+    let thread = THREAD_ID.load(Ordering::SeqCst);
+    if thread == 0 {
+        return false;
+    }
+    unsafe {
+        let _ = PostThreadMessageW(thread, KEY_MESSAGE, WPARAM(key as usize), LPARAM(0));
+    }
+    true
 }
 
 #[cfg(windows)]

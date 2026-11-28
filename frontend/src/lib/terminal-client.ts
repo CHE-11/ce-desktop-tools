@@ -7,14 +7,21 @@ import type {
   TerminalExitEvent,
   TerminalOutputEvent,
   TerminalSession,
+  TerminalSpawnResult,
 } from "../../../types/terminal";
 
 export function terminalShells() {
   return invoke<ShellInfo[]>("terminal_shells");
 }
 
-export function terminalSpawn(shell: ShellKind, cwd: string | null, cols: number, rows: number) {
-  return invoke<TerminalSession>("terminal_spawn", { shell, cwd, cols, rows });
+export function terminalSpawn(
+  shell: ShellKind,
+  cwd: string | null,
+  cols: number,
+  rows: number,
+  admin = false,
+) {
+  return invoke<TerminalSpawnResult>("terminal_spawn", { shell, cwd, cols, rows, admin });
 }
 
 export function terminalWrite(id: string, data: string) {

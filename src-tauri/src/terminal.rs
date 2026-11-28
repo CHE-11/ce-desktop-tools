@@ -27,6 +27,15 @@ pub struct TerminalSession {
     pub shell: String,
     pub cwd: String,
     pub title: String,
+    pub admin: bool,
+}
+
+/// An embedded ConPTY tab, or an elevated console opened outside this app after UAC.
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum SpawnResult {
+    Session { session: TerminalSession },
+    ExternalWindow,
 }
 
 #[derive(Clone, Serialize)]
@@ -89,7 +98,8 @@ impl Terminals {
         cwd: Option<String>,
         cols: u16,
         rows: u16,
-    ) -> Result<TerminalSession, String> {
+        admin: bool,
+    ) -> Result<SpawnResult, String> {
         let info = shells()
             .into_iter()
             .find(|candidate| candidate.id == shell)
@@ -99,6 +109,15 @@ impl Terminals {
             .filter(|path| !path.is_empty() && Path::new(path).is_dir())
             .or_else(|| std::env::var("USERPROFILE").ok())
             .unwrap_or_else(|| "C:\\".into());
+
+        // Mixed elevation in one window is unsafe: a medium-IL UI would drive a high-IL shell.
+        // If this process is not elevated, open a separate elevated console after UAC instead.
+        let elevated = is_elevated();
+        if admin && !elevated {
+            spawn_elevated_external(&info.path, &info.id, &cwd)?;
+            return Ok(SpawnResult::ExternalWindow);
+        }
+        let admin = admin || elevated;
 
         let pair = native_pty_system()
             .openpty(size(cols, rows))
@@ -125,11 +144,17 @@ impl Terminals {
             .map_err(|error| format!("Couldn't write to the console: {error}"))?;
 
         let id = format!("term-{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
+        let title = if admin {
+            format!("{} (Admin)", info.label)
+        } else {
+            info.label.clone()
+        };
         let session = TerminalSession {
             id: id.clone(),
             shell: info.id.clone(),
             cwd,
-            title: info.label.clone(),
+            title,
+            admin,
         };
         self.sessions
             .lock()
@@ -180,7 +205,7 @@ impl Terminals {
                 let _ = app.emit("terminal-exit", ExitEvent { id: &id, code });
             });
 
-        Ok(session)
+        Ok(SpawnResult::Session { session })
     }
 
     pub fn write(&self, id: &str, data: &str) -> Result<(), String> {
@@ -265,6 +290,69 @@ fn size(cols: u16, rows: u16) -> PtySize {
         cols: cols.max(10),
         pixel_width: 0,
         pixel_height: 0,
+    }
+}
+
+fn is_elevated() -> bool {
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::Shell::IsUserAnAdmin;
+        unsafe { IsUserAnAdmin().as_bool() }
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
+/// Opens the shell in a new elevated console window. Cannot be hosted in this app's ConPTY.
+fn spawn_elevated_external(shell_path: &str, shell_id: &str, cwd: &str) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        use windows::core::{PCWSTR, w};
+
+        let file: Vec<u16> = OsStr::new(shell_path)
+            .encode_wide()
+            .chain(Some(0))
+            .collect();
+        let params: Vec<u16> = if shell_id == "cmd" {
+            Vec::new()
+        } else {
+            OsStr::new("-NoLogo").encode_wide().chain(Some(0)).collect()
+        };
+        let dir: Vec<u16> = OsStr::new(cwd).encode_wide().chain(Some(0)).collect();
+        let code = unsafe {
+            ShellExecuteW(
+                None,
+                w!("runas"),
+                PCWSTR(file.as_ptr()),
+                if params.is_empty() {
+                    PCWSTR::null()
+                } else {
+                    PCWSTR(params.as_ptr())
+                },
+                PCWSTR(dir.as_ptr()),
+                SW_SHOWNORMAL,
+            )
+        };
+        let code = code.0 as isize;
+        if code > 32 {
+            return Ok(());
+        }
+        Err(match code {
+            5 => "Elevation was refused or cancelled.".into(),
+            2 => format!("Couldn't find {shell_path}."),
+            other => format!("Couldn't start an elevated shell (Windows error {other})."),
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (shell_path, shell_id, cwd);
+        Err("Elevated shells only work on Windows.".into())
     }
 }
 

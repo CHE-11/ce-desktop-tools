@@ -41,6 +41,8 @@ import { VaultLockDialog } from "./components/Dialogs/VaultLockDialog";
 import { ColorPicker } from "./components/Tools/ColorPicker/ColorPicker";
 import { Launcher } from "./components/Tools/Launcher/Launcher";
 import { ScreenRuler } from "./components/Tools/ScreenRuler/ScreenRuler";
+import { Present } from "./components/Tools/Present/Present";
+import { Record } from "./components/Tools/Record/Record";
 
 function keepUnlockedSnippets(current: ExpansionState, next: ExpansionState): ExpansionState {
   if (!next.locked || next.snippets.length > 0) {
@@ -348,6 +350,8 @@ export function HomePage() {
           {tool === "always-on-top" ? <AlwaysOnTop /> : null}
           {tool === "screen-ruler" ? <ScreenRuler /> : null}
           {tool === "color-picker" ? <ColorPicker /> : null}
+          {tool === "record" ? <Record /> : null}
+          {tool === "present" ? <Present /> : null}
           {tool === "folder-rules" ? <FolderRules onOpenSettings={() => setSettingsOpen(true)} /> : null}
           {tool === "processes" ? <Processes /> : null}
           {tool === "network-explorer" ? <AppCalls /> : null}

@@ -2,7 +2,16 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main", "pantherbar", "launcher", "screen-ruler", "color-picker"],
+  "windows": [
+    "main",
+    "pantherbar",
+    "launcher",
+    "screen-ruler",
+    "color-picker",
+    "record-*",
+    "present-stage-*",
+    "present-palette"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-is-maximized",
@@ -10,6 +19,9 @@
     "core:window:allow-unmaximize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-unminimize",
+    "core:window:allow-set-focus",
     "core:window:allow-start-dragging",
     "dialog:default",
     "store:default",

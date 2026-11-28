@@ -198,6 +198,16 @@ const TOOLS: &[Entry] = &[
         title: "Color Picker",
         keywords: "eyedropper hex rgb colour",
     },
+    Entry {
+        id: "record",
+        title: "Record",
+        keywords: "screen recording video loom recordings",
+    },
+    Entry {
+        id: "present",
+        title: "Present",
+        keywords: "spotlight zoom annotate draw presentation",
+    },
 ];
 
 const ACTIONS: &[Entry] = &[
@@ -245,6 +255,16 @@ const ACTIONS: &[Entry] = &[
         id: "color-pick",
         title: "Pick a color",
         keywords: "eyedropper color picker",
+    },
+    Entry {
+        id: "record-toggle",
+        title: "Start or stop recording",
+        keywords: "record screen video loom capture",
+    },
+    Entry {
+        id: "present-toggle",
+        title: "Present on or off",
+        keywords: "spotlight zoom annotate draw presentation",
     },
     Entry {
         id: "color-editor",
@@ -612,6 +632,21 @@ fn run_action(app: &AppHandle, id: &str) -> Result<Option<String>, String> {
         "color-editor" => {
             hide(app);
             crate::color_picker::open_editor(app);
+            Ok(None)
+        }
+        "record-toggle" => {
+            hide(app);
+            let app = app.clone();
+            std::thread::spawn(move || {
+                // Let the launcher leave the screen before the first frame.
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                crate::record::quick_toggle(&app);
+            });
+            Ok(None)
+        }
+        "present-toggle" => {
+            hide(app);
+            crate::present::quick_toggle(app);
             Ok(None)
         }
         "unpin-all" => {
