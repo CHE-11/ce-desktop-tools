@@ -78,10 +78,24 @@ const MIN_WIDTH = 160;
 const MAX_WIDTH = 480;
 const KEYBOARD_STEP = 16;
 
+const TOP_LEVEL_TOOLS = TOOLS.filter((entry) => !CHILD_IDS.has(entry.id));
+const EXPANSION_TOOL = TOP_LEVEL_TOOLS.find((entry) => entry.id === "expansion")!;
+const OTHER_TOOLS = TOP_LEVEL_TOOLS.filter((entry) => entry.id !== "expansion").sort((a, b) =>
+  a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+);
+
 type AppSidebarProps = {
   tool: ToolId;
   locked: boolean;
   lockSeconds: number | null;
+  onSelect: (id: ToolId) => void;
+};
+
+type MenuEntryProps = {
+  entry: (typeof TOOLS)[number];
+  tool: ToolId;
+  locked: boolean;
+  lockMinutes: number | null;
   onSelect: (id: ToolId) => void;
 };
 
@@ -129,6 +143,101 @@ function writeSidebarWidth(width: number) {
   } catch {
     // The resized width still applies for this session.
   }
+}
+
+function MenuEntry({ entry, tool, locked, lockMinutes, onSelect }: MenuEntryProps) {
+  const selected = tool === entry.id;
+  const Icon = TOOL_ICONS[entry.id];
+  const open = groupOpen(entry.id, tool);
+  const children = open ? TOOLS.filter((child) => (childrenOf(entry.id) as readonly ToolId[]).includes(child.id)) : [];
+
+  return (
+    <div id={`app-menu-${entry.id}-group`} className="flex flex-col gap-0.5">
+      <button
+        id={`app-menu-${entry.id}`}
+        type="button"
+        aria-current={selected ? "page" : undefined}
+        aria-expanded={childrenOf(entry.id).length > 0 ? open : undefined}
+        onClick={() => onSelect(entry.id)}
+        className={cn(
+          "flex w-full items-center gap-2 rounded-md px-2.5 py-1 text-left text-xs",
+          selected
+            ? "bg-zinc-800 font-medium text-zinc-100"
+            : open
+              ? "text-zinc-100 hover:bg-zinc-800"
+              : "text-zinc-300 hover:bg-zinc-800",
+        )}
+      >
+        <Icon id={`app-menu-${entry.id}-icon`} className="size-4 shrink-0" aria-hidden="true" />
+        <span id={`app-menu-${entry.id}-label`} className="min-w-0 flex-1 truncate">
+          {entry.label}
+        </span>
+        {entry.lockable ? (
+          locked ? (
+            <Lock
+              id={`app-menu-${entry.id}-lock`}
+              className="size-3.5 shrink-0 text-amber-300"
+              aria-label="Locked"
+            />
+          ) : (
+            <>
+              {lockMinutes != null ? (
+                <span
+                  id={`app-menu-${entry.id}-lock-minutes`}
+                  className="shrink-0 text-xs tabular-nums text-zinc-400"
+                  title={`${lockMinutes} minutes until the vault locks`}
+                >
+                  {lockMinutes} min
+                </span>
+              ) : null}
+              <Unlock
+                id={`app-menu-${entry.id}-lock`}
+                className="size-3.5 shrink-0 text-zinc-500"
+                aria-label="Unlocked"
+              />
+            </>
+          )
+        ) : null}
+      </button>
+      {children.length > 0 ? (
+        <div
+          id={`app-menu-${entry.id}-children`}
+          role="group"
+          aria-label={`${entry.label} tools`}
+          className="ml-4 flex flex-col gap-0.5 border-l border-zinc-700 pl-1.5"
+        >
+          {children.map((child) => {
+            const childSelected = tool === child.id;
+            const ChildIcon = TOOL_ICONS[child.id];
+            return (
+              <button
+                id={`app-menu-${child.id}`}
+                key={child.id}
+                type="button"
+                aria-current={childSelected ? "page" : undefined}
+                onClick={() => onSelect(child.id)}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md px-2.5 py-1 text-left text-xs",
+                  childSelected
+                    ? "bg-zinc-800 font-medium text-zinc-100"
+                    : "text-zinc-300 hover:bg-zinc-800",
+                )}
+              >
+                <ChildIcon
+                  id={`app-menu-${child.id}-icon`}
+                  className="size-4 shrink-0"
+                  aria-hidden="true"
+                />
+                <span id={`app-menu-${child.id}-label`} className="min-w-0 flex-1 truncate">
+                  {child.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function AppSidebar({ tool, locked, lockSeconds, onSelect }: AppSidebarProps) {
@@ -209,100 +318,24 @@ export function AppSidebar({ tool, locked, lockSeconds, onSelect }: AppSidebarPr
     <div id="app-sidebar-shell" style={{ width }} className="relative z-10 flex shrink-0">
       <aside id="app-sidebar" className="flex min-h-0 min-w-0 flex-1 flex-col justify-between border-r border-zinc-800 bg-zinc-900">
         <nav id="app-menu" aria-label="Pages" className="flex min-h-0 flex-col gap-0.5 overflow-y-auto px-2 pt-2">
-          {TOOLS.filter((entry) => !CHILD_IDS.has(entry.id)).map((entry) => {
-            const selected = tool === entry.id;
-            const Icon = TOOL_ICONS[entry.id];
-            const open = groupOpen(entry.id, tool);
-            const children = open ? TOOLS.filter((child) => (childrenOf(entry.id) as readonly ToolId[]).includes(child.id)) : [];
-
-            return (
-              <div id={`app-menu-${entry.id}-group`} key={entry.id} className="flex flex-col gap-0.5">
-                <button
-                  id={`app-menu-${entry.id}`}
-                  type="button"
-                  aria-current={selected ? "page" : undefined}
-                  aria-expanded={childrenOf(entry.id).length > 0 ? open : undefined}
-                  onClick={() => onSelect(entry.id)}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1 text-left text-xs",
-                    selected
-                      ? "bg-zinc-800 font-medium text-zinc-100"
-                      : open
-                        ? "text-zinc-100 hover:bg-zinc-800"
-                        : "text-zinc-300 hover:bg-zinc-800",
-                  )}
-                >
-                  <Icon id={`app-menu-${entry.id}-icon`} className="size-4 shrink-0" aria-hidden="true" />
-                  <span id={`app-menu-${entry.id}-label`} className="min-w-0 flex-1 truncate">
-                    {entry.label}
-                  </span>
-                  {entry.lockable ? (
-                    locked ? (
-                      <Lock
-                        id={`app-menu-${entry.id}-lock`}
-                        className="size-3.5 shrink-0 text-amber-300"
-                        aria-label="Locked"
-                      />
-                    ) : (
-                      <>
-                        {lockMinutes != null ? (
-                          <span
-                            id={`app-menu-${entry.id}-lock-minutes`}
-                            className="shrink-0 text-xs tabular-nums text-zinc-400"
-                            title={`${lockMinutes} minutes until the vault locks`}
-                          >
-                            {lockMinutes} min
-                          </span>
-                        ) : null}
-                        <Unlock
-                          id={`app-menu-${entry.id}-lock`}
-                          className="size-3.5 shrink-0 text-zinc-500"
-                          aria-label="Unlocked"
-                        />
-                      </>
-                    )
-                  ) : null}
-                </button>
-                {children.length > 0 ? (
-                  <div
-                    id={`app-menu-${entry.id}-children`}
-                    role="group"
-                    aria-label={`${entry.label} tools`}
-                    className="ml-4 flex flex-col gap-0.5 border-l border-zinc-700 pl-1.5"
-                  >
-                    {children.map((child) => {
-                      const childSelected = tool === child.id;
-                      const ChildIcon = TOOL_ICONS[child.id];
-                      return (
-                        <button
-                          id={`app-menu-${child.id}`}
-                          key={child.id}
-                          type="button"
-                          aria-current={childSelected ? "page" : undefined}
-                          onClick={() => onSelect(child.id)}
-                          className={cn(
-                            "flex w-full items-center gap-2 rounded-md px-2.5 py-1 text-left text-xs",
-                            childSelected
-                              ? "bg-zinc-800 font-medium text-zinc-100"
-                              : "text-zinc-300 hover:bg-zinc-800",
-                          )}
-                        >
-                          <ChildIcon
-                            id={`app-menu-${child.id}-icon`}
-                            className="size-4 shrink-0"
-                            aria-hidden="true"
-                          />
-                          <span id={`app-menu-${child.id}-label`} className="min-w-0 flex-1 truncate">
-                            {child.label}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
+          <MenuEntry
+            entry={EXPANSION_TOOL}
+            tool={tool}
+            locked={locked}
+            lockMinutes={lockMinutes}
+            onSelect={onSelect}
+          />
+          <div id="app-menu-divider" role="separator" className="my-1.5 border-t border-zinc-800" />
+          {OTHER_TOOLS.map((entry) => (
+            <MenuEntry
+              key={entry.id}
+              entry={entry}
+              tool={tool}
+              locked={locked}
+              lockMinutes={lockMinutes}
+              onSelect={onSelect}
+            />
+          ))}
         </nav>
 
         <div id="app-actions" aria-label="Actions" className="flex shrink-0 flex-col gap-2 border-t border-zinc-800 px-2 py-2">

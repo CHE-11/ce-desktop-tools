@@ -1,6 +1,6 @@
 [package]
 name = "ce-desktop-tools"
-version = "1.0.33"
+version = "1.0.34"
 description = "Windows desktop tools"
 authors = ["you"]
 edition = "2024"
